@@ -66,7 +66,8 @@ class MediaRepository(private val context: Context) {
             MediaStore.Images.Media.WIDTH,
             MediaStore.Images.Media.HEIGHT,
             MediaStore.Images.Media.DATA,
-            MediaStore.Images.Media.MIME_TYPE
+            MediaStore.Images.Media.MIME_TYPE,
+            MediaStore.Images.Media.SIZE
         )
         val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
 
@@ -78,6 +79,7 @@ class MediaRepository(private val context: Context) {
             val hCol     = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.HEIGHT)
             val pathCol  = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
             val mimeCol  = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.MIME_TYPE)
+            val sizeCol  = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
 
             while (cursor.moveToNext()) {
                 val id    = cursor.getLong(idCol)
@@ -93,6 +95,8 @@ class MediaRepository(private val context: Context) {
                     width      = cursor.getInt(wCol),
                     height     = cursor.getInt(hCol),
                     path       = cursor.getString(pathCol) ?: "",
+                    size       = cursor.getLong(sizeCol),
+                    mimeType   = mime,
                     isHidden   = id.toString() in hiddenSet,
                     isFavorite = id.toString() in favoriteSet
                 )
@@ -114,7 +118,9 @@ class MediaRepository(private val context: Context) {
             MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.WIDTH,
             MediaStore.Video.Media.HEIGHT,
-            MediaStore.Video.Media.DATA
+            MediaStore.Video.Media.DATA,
+            MediaStore.Video.Media.SIZE,
+            MediaStore.Video.Media.MIME_TYPE
         )
         val sortOrder = "${MediaStore.Video.Media.DATE_TAKEN} DESC"
 
@@ -126,6 +132,8 @@ class MediaRepository(private val context: Context) {
             val wCol    = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
             val hCol    = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
             val pathCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.MIME_TYPE)
 
             while (cursor.moveToNext()) {
                 val id  = cursor.getLong(idCol)
@@ -140,6 +148,8 @@ class MediaRepository(private val context: Context) {
                     width      = cursor.getInt(wCol),
                     height     = cursor.getInt(hCol),
                     path       = cursor.getString(pathCol) ?: "",
+                    size       = cursor.getLong(sizeCol),
+                    mimeType   = cursor.getString(mimeCol) ?: "video/*",
                     isHidden   = id.toString() in hiddenSet,
                     isFavorite = id.toString() in favoriteSet
                 )

@@ -31,7 +31,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.galeria.app.data.MediaItem
-import com.galeria.app.ui.library.MediaGridCell
+import com.galeria.app.ui.library.PhotoCell
 import com.galeria.app.ui.theme.GlassTokens
 
 @Composable
@@ -142,10 +142,9 @@ fun SearchScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(results, key = { it.id }) { item ->
-                    MediaGridCell(
+                    PhotoCell(
                         item = item,
                         isSelected = false,
-                        isSelectMode = false,
                         onClick = { onItemClick(item) },
                         onLongPress = {}
                     )

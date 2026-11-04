@@ -35,6 +35,7 @@ fun PhotoViewerScreen(
     onToggleFavorite: (Long) -> Unit,
     onShare: (MediaItem) -> Unit,
     onDelete: (MediaItem) -> Unit,
+    onInfo: ((MediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var currentIndex by remember { mutableIntStateOf(startIndex.coerceIn(0, items.lastIndex)) }
@@ -155,7 +156,7 @@ fun PhotoViewerScreen(
                 ) {
                     ActionButton("⬆", "Share") { onShare(current) }
                     ActionButton(if (current.isFavorite) "♥" else "♡", "Favorite") { onToggleFavorite(current.id) }
-                    ActionButton("✏", "Edit") { /* TODO: editor */ }
+                    ActionButton("ℹ", "Info") { onInfo?.invoke(current) }
                     ActionButton("🗑", "Delete") { onDelete(current) }
                 }
             }

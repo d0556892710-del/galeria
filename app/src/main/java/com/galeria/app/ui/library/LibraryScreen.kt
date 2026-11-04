@@ -1,15 +1,17 @@
 package com.galeria.app.ui.library
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,11 +20,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.galeria.app.data.MediaItem
+import com.galeria.app.ui.components.GlassIconButton
+import com.galeria.app.ui.components.LumaTopBar
 import com.galeria.app.ui.theme.GlassTokens
 
 @Composable
@@ -30,125 +36,123 @@ fun LibraryScreen(
     items: List<MediaItem>,
     selectedIds: Set<Long>,
     totalCount: Int,
+    groupByDate: Boolean = true,
+    gridColumns: Int = 3,
     onItemClick: (MediaItem) -> Unit,
     onItemLongPress: (MediaItem) -> Unit,
     onSelectToggle: (Long) -> Unit,
+    onSearchClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val gridState = rememberLazyGridState()
-    // Hide header when scrolled past the first item
-    val firstVisible by remember { derivedStateOf { gridState.firstVisibleItemIndex } }
-    val showLargeTitle = firstVisible == 0
+    val grouped = remember(items) {
+        val fmt = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault())
+        items.groupBy { fmt.format(java.util.Date(it.dateTaken)) }
+    }
+    val isSelectMode = selectedIds.isNotEmpty()
 
     Box(modifier = modifier.fillMaxSize().background(GlassTokens.BgPrimary)) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            state = gridState,
-            contentPadding = PaddingValues(bottom = 100.dp),
-            horizontalArrangement = Arrangement.spacedBy(1.5.dp),
-            verticalArrangement = Arrangement.spacedBy(1.5.dp),
-            modifier = Modifier.fillMaxSize()
+        LazyColumn(
+            contentPadding = PaddingValues(bottom = 100.dp)
         ) {
-            // Header item spanning all columns
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                LibraryHeader(
-                    totalCount = totalCount,
-                    isSelectMode = selectedIds.isNotEmpty(),
-                    selectedCount = selectedIds.size,
-                    showLargeTitle = true
-                )
-            }
-
-            // Photo grid
-            items(items, key = { it.id }) { item ->
-                MediaGridCell(
-                    item = item,
-                    isSelected = item.id in selectedIds,
-                    isSelectMode = selectedIds.isNotEmpty(),
-                    onClick = {
-                        if (selectedIds.isNotEmpty()) onSelectToggle(item.id)
-                        else onItemClick(item)
-                    },
-                    onLongPress = { onItemLongPress(item) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LibraryHeader(
-    totalCount: Int,
-    isSelectMode: Boolean,
-    selectedCount: Int,
-    showLargeTitle: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Column {
-                // "Library" — big bold white title
-                Text(
-                    text = "Library",
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GlassTokens.TextPrimary,
-                    lineHeight = 36.sp
-                )
-                // "4,627 Items" — subtitle in secondary color
-                if (!isSelectMode) {
-                    Text(
-                        text = "%,d Items".format(totalCount),
-                        fontSize = 13.sp,
-                        color = GlassTokens.TextSecondary,
-                        fontWeight = FontWeight.Normal
-                    )
-                } else {
-                    Text(
-                        text = "$selectedCount Selected",
-                        fontSize = 13.sp,
-                        color = GlassTokens.AccentBlue,
-                        fontWeight = FontWeight.Medium
+            // Top bar
+            item {
+                Column {
+                    Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                    LumaTopBar(
+                        title = "LUMA",
+                        subtitle = "$totalCount items",
+                        onSearchClick = onSearchClick
                     )
                 }
             }
 
-            // Right side — "Select" pill
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(GlassTokens.GlassStandard)
-                    .border(0.5.dp, GlassTokens.BorderSubtle, CircleShape)
-                    .clickable { /* TODO: toggle select mode */ }
-                    .padding(horizontal = 14.dp, vertical = 7.dp)
-            ) {
-                Text(
-                    text = if (isSelectMode) "Done" else "Select",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = GlassTokens.AccentBlue
-                )
+            if (groupByDate) {
+                grouped.forEach { (month, monthItems) ->
+                    item(key = "header_$month") {
+                        Text(
+                            text = month,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GlassTokens.TextPrimary,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        )
+                    }
+                    item(key = "grid_$month") {
+                        PhotoGrid(
+                            items = monthItems,
+                            columns = gridColumns,
+                            selectedIds = selectedIds,
+                            onItemClick = onItemClick,
+                            onItemLongPress = onItemLongPress
+                        )
+                    }
+                }
+            } else {
+                item {
+                    PhotoGrid(
+                        items = items,
+                        columns = gridColumns,
+                        selectedIds = selectedIds,
+                        onItemClick = onItemClick,
+                        onItemLongPress = onItemLongPress
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
+
+        // Select mode toolbar
+        AnimatedVisibility(
+            visible = isSelectMode,
+            enter = slideInVertically { -it } + fadeIn(),
+            exit  = slideOutVertically { -it } + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            SelectionToolbar(
+                count = selectedIds.size,
+                onShare = {},
+                onHide  = { /* handled by parent */ },
+                onDelete = {},
+                onCancel = { /* handled by parent */ }
+            )
+        }
     }
 }
 
 @Composable
-fun MediaGridCell(
+private fun PhotoGrid(
+    items: List<MediaItem>,
+    columns: Int,
+    selectedIds: Set<Long>,
+    onItemClick: (MediaItem) -> Unit,
+    onItemLongPress: (MediaItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val rows = items.chunked(columns)
+    Column(modifier = modifier) {
+        rows.forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                row.forEach { item ->
+                    PhotoCell(
+                        item = item,
+                        isSelected = item.id in selectedIds,
+                        onClick = { onItemClick(item) },
+                        onLongPress = { onItemLongPress(item) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Fill empty cells
+                repeat(columns - row.size) {
+                    Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PhotoCell(
     item: MediaItem,
     isSelected: Boolean,
-    isSelectMode: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier
@@ -156,106 +160,113 @@ fun MediaGridCell(
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .pointerInput(Unit) {
+            .padding(1.dp)
+            .pointerInput(item.id) {
                 detectTapGestures(
                     onTap = { onClick() },
                     onLongPress = { onLongPress() }
                 )
             }
     ) {
-        // Thumbnail
         AsyncImage(
-            model = item.uri,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(item.uri)
+                .crossfade(true)
+                .size(300)
+                .build(),
             contentDescription = item.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
 
-        // Video badge — duration pill bottom-left
-        if (item.isVideo && item.durationFormatted.isNotEmpty()) {
+        // Gradient overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.3f)),
+                        startY = Float.MAX_VALUE / 2
+                    )
+                )
+        )
+
+        // Video badge
+        if (item.isVideo) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.BottomEnd)
                     .padding(4.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0x99000000))
+                    .background(Color.Black.copy(alpha = 0.7f))
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
                 Text(
                     text = item.durationFormatted,
-                    fontSize = 11.sp,
                     color = Color.White,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
         }
 
-        // GIF badge
-        if (item.isGif) {
-            Box(
+        // Favorite star
+        if (item.isFavorite) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = null,
+                tint = Color.Yellow,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(4.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0x99000000))
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
-            ) {
-                Text("GIF", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        // Favorite star top-right
-        if (item.isFavorite) {
-            Text(
-                text = "★",
-                fontSize = 14.sp,
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
+                    .size(14.dp)
             )
         }
 
-        // Selection overlay
-        AnimatedVisibility(
-            visible = isSelectMode,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
+        // Selected overlay
+        if (isSelected) {
             Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.TopEnd
-            ) {
-                // Dim overlay when select mode active but not selected
-                if (!isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.25f))
-                    )
-                }
-                // Check circle
-                Box(
-                    modifier = Modifier
-                        .padding(5.dp)
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isSelected) GlassTokens.AccentBlue else Color(0x66000000)
-                        )
-                        .border(
-                            1.5.dp,
-                            if (isSelected) GlassTokens.AccentBlue else Color.White.copy(alpha = 0.6f),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Text("✓", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(GlassTokens.AccentBlue.copy(alpha = 0.4f))
+            )
+            Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = GlassTokens.AccentBlue,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectionToolbar(
+    count: Int,
+    onShare: () -> Unit,
+    onHide: () -> Unit,
+    onDelete: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(GlassTokens.GlassDark)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onCancel) {
+            Text("Cancel", color = GlassTokens.AccentBlue)
+        }
+        Text("$count selected", color = GlassTokens.TextPrimary, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassIconButton(icon = Icons.Filled.Share, onClick = onShare, size = 32.dp)
+            GlassIconButton(icon = Icons.Filled.VisibilityOff, onClick = onHide, size = 32.dp)
+            GlassIconButton(icon = Icons.Filled.Delete, onClick = onDelete, tint = GlassTokens.Danger, size = 32.dp)
         }
     }
 }

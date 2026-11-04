@@ -1,286 +1,287 @@
 package com.galeria.app.ui.components
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.galeria.app.ui.theme.GlassTokens
 
-// ═══════════════════════════════════════════════════════════════
-//  GLASS CARD  — standard frosted card with gradient border
-// ═══════════════════════════════════════════════════════════════
+// ── Glass Card ────────────────────────────────────────────────────────────
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    radius: Dp = 16.dp,
-    bgColor: Color = GlassTokens.GlassStandard,
-    borderColor: Color = GlassTokens.BorderRegular,
-    content: @Composable BoxScope.() -> Unit
+    cornerRadius: Dp = 16.dp,
+    alpha: Float = 0.15f,
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(radius))
-            .background(
-                Brush.verticalGradient(
-                    listOf(bgColor.copy(alpha = bgColor.alpha * 1.3f), bgColor)
-                )
-            )
-            .border(0.5.dp, borderColor, RoundedCornerShape(radius)),
-        content = content
-    )
+    val bg = Color.White.copy(alpha = alpha)
+    val shape = RoundedCornerShape(cornerRadius)
+    val baseModifier = modifier
+        .clip(shape)
+        .background(bg)
+        .border(1.dp, GlassTokens.BorderSubtle, shape)
+
+    if (onClick != null) {
+        Column(
+            modifier = baseModifier.clickable(onClick = onClick),
+            content = content
+        )
+    } else {
+        Column(
+            modifier = baseModifier,
+            content = content
+        )
+    }
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  GLASS BUTTON  — interactive, scales on press
-// ═══════════════════════════════════════════════════════════════
+// ── Glass Button ──────────────────────────────────────────────────────────
 @Composable
 fun GlassButton(
+    text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    radius: Dp = 12.dp,
-    content: @Composable BoxScope.() -> Unit
+    icon: ImageVector? = null,
+    tint: Color = GlassTokens.TextPrimary,
+    bgAlpha: Float = 0.15f
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.94f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "scale")
-
-    Box(
+    val shape = RoundedCornerShape(12.dp)
+    Row(
         modifier = modifier
-            .scale(scale)
-            .clip(RoundedCornerShape(radius))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        GlassTokens.GlassTinted,
-                        GlassTokens.GlassStandard
-                    )
-                )
-            )
-            .border(0.5.dp, GlassTokens.BorderRegular, RoundedCornerShape(radius))
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-        content = content
-    )
+            .clip(shape)
+            .background(Color.White.copy(alpha = bgAlpha))
+            .border(1.dp, GlassTokens.BorderSubtle, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(text, color = tint, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  GLASS PILL  — rounded pill, used for nav labels + small buttons
-// ═══════════════════════════════════════════════════════════════
-@Composable
-fun GlassPill(
-    onClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
-    bgColor: Color = GlassTokens.GlassStandard,
-    content: @Composable BoxScope.() -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed && onClick != null) 0.95f else 1f, label = "pill")
+// ── LUMA Bottom Navigation Bar ────────────────────────────────────────────
+data class LumaNavItem(val icon: ImageVector, val label: String)
 
-    val base = modifier
-        .scale(scale)
-        .clip(CircleShape)
-        .background(
-            Brush.verticalGradient(
-                listOf(bgColor.copy(alpha = (bgColor.alpha * 1.4f).coerceIn(0f, 1f)), bgColor)
-            )
-        )
-        .border(0.5.dp, GlassTokens.BorderSubtle, CircleShape)
+val lumaNavItems = listOf(
+    LumaNavItem(Icons.Filled.Photo,      "Photos"),
+    LumaNavItem(Icons.Filled.PhotoAlbum, "Albums"),
+    LumaNavItem(Icons.Filled.Explore,    "Explore"),
+    LumaNavItem(Icons.Filled.Settings,   "Settings")
+)
 
-    Box(
-        modifier = if (onClick != null)
-            base.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-        else base,
-        contentAlignment = Alignment.Center,
-        content = content
-    )
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  BOTTOM NAV BAR  — frosted pill exactly like iOS 27 screenshot
-//  Library | Collections   [Search icon]
-// ═══════════════════════════════════════════════════════════════
 @Composable
 fun GaleriaBottomBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit,
-    onSearchClick: () -> Unit,
+    onSearchClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        // frosted pill
+        Row(
+            modifier = Modifier
+                .padding(bottom = 24.dp)
+                .clip(RoundedCornerShape(50.dp))
+                .background(GlassTokens.NavPillBg)
+                .border(1.dp, GlassTokens.NavPillBorder, RoundedCornerShape(50.dp))
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            lumaNavItems.forEachIndexed { idx, item ->
+                val isActive = selectedTab == idx
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(40.dp))
+                        .background(if (isActive) Color.White.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onTabSelected(idx) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            item.icon,
+                            contentDescription = item.label,
+                            tint = if (isActive) GlassTokens.NavActive else GlassTokens.NavInactive,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            item.label,
+                            fontSize = 10.sp,
+                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isActive) GlassTokens.NavActive else GlassTokens.NavInactive
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Glass Top Bar ─────────────────────────────────────────────────────────
+@Composable
+fun LumaTopBar(
+    title: String,
+    onSearchClick: (() -> Unit)? = null,
+    onMoreClick: (() -> Unit)? = null,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = title,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                color = GlassTokens.TextPrimary,
+                letterSpacing = (-0.5).sp
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    fontSize = 13.sp,
+                    color = GlassTokens.TextSecondary
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onSearchClick != null) {
+                GlassIconButton(icon = Icons.Filled.Search, onClick = onSearchClick)
+            }
+            if (onMoreClick != null) {
+                GlassIconButton(icon = Icons.Filled.MoreVert, onClick = onMoreClick)
+            }
+        }
+    }
+}
+
+@Composable
+fun GlassIconButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    tint: Color = GlassTokens.TextPrimary,
+    size: Dp = 36.dp,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 20.dp)
-            .navigationBarsPadding(),
-        contentAlignment = Alignment.BottomCenter
+            .size(size)
+            .clip(CircleShape)
+            .background(GlassTokens.GlassStandard)
+            .border(1.dp, GlassTokens.BorderSubtle, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            // Left pill — Library + Collections tabs
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(GlassTokens.NavPillBg)
-                    .border(0.5.dp, GlassTokens.NavPillBorder, CircleShape)
-            ) {
-                Row(modifier = Modifier.padding(4.dp)) {
-                    NavTab(
-                        label = "Library",
-                        isSelected = selectedTab == 0,
-                        onClick = { onTabSelected(0) }
-                    )
-                    NavTab(
-                        label = "Collections",
-                        isSelected = selectedTab == 1,
-                        onClick = { onTabSelected(1) }
-                    )
-                }
-            }
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+    }
+}
 
-            // Right — Search button
-            GlassPill(
-                onClick = onSearchClick,
-                bgColor = GlassTokens.NavPillBg
-            ) {
-                Box(
-                    modifier = Modifier.size(44.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🔍", fontSize = 18.sp)
-                }
+// ── Glass Settings Row ────────────────────────────────────────────────────
+@Composable
+fun GlassSettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    iconTint: Color = GlassTokens.AccentBlue,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(iconTint.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = GlassTokens.TextPrimary)
+            if (subtitle != null) {
+                Text(subtitle, fontSize = 12.sp, color = GlassTokens.TextSecondary)
             }
+        }
+        if (trailing != null) trailing()
+        else if (onClick != null) {
+            Icon(Icons.Filled.ChevronRight, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(16.dp))
         }
     }
 }
 
+// ── Glass Section Container ───────────────────────────────────────────────
 @Composable
-private fun NavTab(label: String, isSelected: Boolean, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .then(
-                if (isSelected) Modifier.background(GlassTokens.GlassStandard)
-                else Modifier
-            )
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            color = if (isSelected) GlassTokens.NavActive else GlassTokens.NavInactive,
-            fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold
-                         else            androidx.compose.ui.text.font.FontWeight.Normal
-        )
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  ACTION SHEET  — slides from bottom, blur background
-// ═══════════════════════════════════════════════════════════════
-@Composable
-fun GlassActionSheet(
-    onDismiss: () -> Unit,
-    items: List<ActionSheetItem>
+fun GlassSection(
+    title: String? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss
-            ),
-        contentAlignment = Alignment.BottomCenter
-    ) {
+    Column(modifier = modifier) {
+        if (title != null) {
+            Text(
+                text = title.uppercase(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = GlassTokens.TextTertiary,
+                letterSpacing = 0.8.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-                .navigationBarsPadding()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {}
-                )
-        ) {
-            // Items list
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                radius = 14.dp,
-                bgColor = Color(0xE6000000)
-            ) {
-                Column {
-                    items.forEachIndexed { index, item ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    item.action()
-                                    onDismiss()
-                                }
-                                .padding(horizontal = 20.dp, vertical = 16.dp)
-                        ) {
-                            Text(
-                                text = item.label,
-                                fontSize = 17.sp,
-                                color = if (item.isDestructive) GlassTokens.Danger
-                                        else GlassTokens.TextPrimary
-                            )
-                        }
-                        if (index < items.size - 1) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(0.5.dp)
-                                    .background(GlassTokens.BorderSubtle)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Cancel button
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                radius = 14.dp,
-                bgColor = Color(0xE6000000)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onDismiss)
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("ביטול", fontSize = 17.sp, color = GlassTokens.AccentBlue,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                }
-            }
-        }
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(GlassTokens.GlassUltraClear)
+                .border(1.dp, GlassTokens.BorderSubtle, RoundedCornerShape(14.dp)),
+            content = content
+        )
     }
 }
-
-data class ActionSheetItem(val label: String, val isDestructive: Boolean = false, val action: () -> Unit)
