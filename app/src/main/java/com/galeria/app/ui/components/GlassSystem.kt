@@ -87,9 +87,9 @@ fun GlassButton(
 data class LumaNavItem(val icon: ImageVector, val label: String)
 
 val lumaNavItems = listOf(
-    LumaNavItem(Icons.Filled.Photo,      "Photos"),
-    LumaNavItem(Icons.Filled.PhotoAlbum, "Albums"),
-    LumaNavItem(Icons.Filled.Explore,    "Explore"),
+    LumaNavItem(Icons.Filled.Image,      "Photos"),
+    LumaNavItem(Icons.Filled.Collections,"Albums"),
+    LumaNavItem(Icons.Filled.Layers,     "Explore"),
     LumaNavItem(Icons.Filled.Settings,   "Settings")
 )
 
@@ -251,7 +251,7 @@ fun GlassSettingsRow(
         }
         if (trailing != null) trailing()
         else if (onClick != null) {
-            Icon(Icons.Filled.ChevronRight, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(16.dp))
+            Icon(Icons.Filled.KeyboardArrowRight, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(16.dp))
         }
     }
 }

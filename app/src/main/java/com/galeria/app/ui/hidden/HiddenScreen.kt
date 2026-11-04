@@ -112,9 +112,7 @@ fun HiddenScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Authentication failed", color = GlassTokens.TextSecondary, fontSize = 16.sp)
                     Spacer(Modifier.height(16.dp))
-                    GlassButton(onClick = { authState = HiddenAuthState.LOCKED }) {
-                        Text("Retry", color = GlassTokens.TextPrimary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp))
-                    }
+                    GlassButton(text = "Retry", onClick = { authState = HiddenAuthState.LOCKED })
                 }
             }
         }
@@ -143,10 +141,7 @@ private fun LockScreen(
             }
             Text("Hidden Album", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = GlassTokens.TextPrimary)
             Text("Authenticate to view", fontSize = 15.sp, color = GlassTokens.TextSecondary)
-            GlassButton(onClick = onAuthenticate) {
-                Text("View Album", color = GlassTokens.AccentBlue, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp))
-            }
+            GlassButton(text = "View Album", onClick = onAuthenticate, tint = GlassTokens.AccentBlue)
         }
         // Back button top-left
         Box(modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(16.dp)

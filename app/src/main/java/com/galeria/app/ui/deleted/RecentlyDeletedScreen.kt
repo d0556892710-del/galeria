@@ -46,7 +46,7 @@ fun RecentlyDeletedScreen(
             if (items.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(Icons.Filled.DeleteSweep, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(64.dp))
+                        Icon(Icons.Filled.Delete, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(64.dp))
                         Text("No Deleted Items", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = GlassTokens.TextSecondary)
                         Text("Items you delete will appear here", fontSize = 14.sp, color = GlassTokens.TextTertiary)
                     }
@@ -86,13 +86,13 @@ fun RecentlyDeletedScreen(
                     GlassButton(
                         text = "Recover",
                         onClick = { onRestore(selectedIds); selectedIds = emptySet() },
-                        icon = Icons.Filled.Restore,
+                        icon = Icons.Filled.Refresh,
                         tint = GlassTokens.AccentBlue
                     )
                     GlassButton(
                         text = "Delete Forever",
                         onClick = { showConfirm = true },
-                        icon = Icons.Filled.DeleteForever,
+                        icon = Icons.Filled.Delete,
                         tint = GlassTokens.Danger,
                         bgAlpha = 0.08f
                     )

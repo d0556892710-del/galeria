@@ -229,7 +229,7 @@ private fun VideoCard(item: MediaItem, onClick: () -> Unit) {
                 .background(Color.Black.copy(0.3f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.PlayCircle, null, tint = Color.White.copy(0.9f), modifier = Modifier.size(28.dp))
+            Icon(Icons.Filled.PlayArrow, null, tint = Color.White.copy(0.9f), modifier = Modifier.size(28.dp))
         }
         Box(
             modifier = Modifier
@@ -273,6 +273,6 @@ private fun MonthRow(month: String, item: MediaItem, count: Int) {
             Text(month, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = GlassTokens.TextPrimary)
             Text("$count items", fontSize = 12.sp, color = GlassTokens.TextSecondary)
         }
-        Icon(Icons.Filled.ChevronRight, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(16.dp))
+        Icon(Icons.Filled.KeyboardArrowRight, null, tint = GlassTokens.TextTertiary, modifier = Modifier.size(16.dp))
     }
 }

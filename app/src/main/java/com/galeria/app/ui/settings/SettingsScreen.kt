@@ -50,7 +50,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.GridView, null, tint = GlassTokens.AccentBlue, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.GridOn, null, tint = GlassTokens.AccentBlue, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("Grid Columns", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = GlassTokens.TextPrimary, modifier = Modifier.weight(1f))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -76,7 +76,7 @@ fun SettingsScreen(
                 // Glass opacity slider
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Opacity, null, tint = GlassTokens.AccentBlue, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Filled.Tune, null, tint = GlassTokens.AccentBlue, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Glass Transparency", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = GlassTokens.TextPrimary, modifier = Modifier.weight(1f))
                         Text("${(settings.glassOpacity * 100).toInt()}%", fontSize = 13.sp, color = GlassTokens.TextSecondary)
@@ -96,7 +96,7 @@ fun SettingsScreen(
 
                 // Group by date
                 GlassSettingsRow(
-                    icon = Icons.Filled.CalendarMonth,
+                    icon = Icons.Filled.DateRange,
                     title = "Group by Date",
                     iconTint = GlassTokens.AccentPurple,
                     trailing = {
@@ -131,7 +131,7 @@ fun SettingsScreen(
         item {
             GlassSection(title = "Animations") {
                 GlassSettingsRow(
-                    icon = Icons.Filled.Animation,
+                    icon = Icons.Filled.PlayArrow,
                     title = "Enable Animations",
                     iconTint = GlassTokens.AccentPurple,
                     trailing = {
@@ -164,7 +164,7 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
                 GlassSettingsRow(
-                    icon = Icons.Filled.Fingerprint,
+                    icon = Icons.Filled.Security,
                     title = "Hidden Album Lock",
                     subtitle = "Biometric to view hidden photos",
                     iconTint = GlassTokens.AccentPurple,
@@ -182,7 +182,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Timer, null, tint = GlassTokens.Warning, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.Schedule, null, tint = GlassTokens.Warning, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("Auto Lock", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = GlassTokens.TextPrimary, modifier = Modifier.weight(1f))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -204,7 +204,7 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
                 GlassSettingsRow(
-                    icon = Icons.Filled.VisibilityOff,
+                    icon = Icons.Filled.LockOpen,
                     title = "Show Hidden Album",
                     subtitle = "Display in Albums screen",
                     iconTint = GlassTokens.TextSecondary,
@@ -218,7 +218,7 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
                 GlassSettingsRow(
-                    icon = Icons.Filled.DeleteForever,
+                    icon = Icons.Filled.Delete,
                     title = "Protect Recently Deleted",
                     subtitle = "Require biometric to view",
                     iconTint = GlassTokens.Danger,
@@ -238,7 +238,7 @@ fun SettingsScreen(
         item {
             GlassSection(title = "About") {
                 GlassSettingsRow(
-                    icon = Icons.Filled.Apps,
+                    icon = Icons.Filled.Star,
                     title = "LUMA Gallery Pro",
                     subtitle = "Version 1.0.0",
                     iconTint = GlassTokens.AccentBlue,
@@ -246,14 +246,14 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
                 GlassSettingsRow(
-                    icon = Icons.Filled.PrivacyTip,
+                    icon = Icons.Filled.VerifiedUser,
                     title = "Privacy Information",
                     iconTint = GlassTokens.AccentPurple,
                     onClick = {}
                 )
                 HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
                 GlassSettingsRow(
-                    icon = Icons.Filled.Code,
+                    icon = Icons.Filled.Article,
                     title = "Open Source Licenses",
                     iconTint = GlassTokens.TextSecondary,
                     onClick = {}

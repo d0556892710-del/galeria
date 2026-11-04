@@ -51,22 +51,22 @@ fun AlbumsScreen(
     modifier: Modifier = Modifier
 ) {
     val builtInAlbums = buildList {
-        add(Album("all",      "All Photos",          allMedia.size,          allMedia.firstOrNull(), Icons.Filled.Photo))
+        add(Album("all",      "All Photos",          allMedia.size,          allMedia.firstOrNull(), Icons.Filled.Image))
         add(Album("favorites","Favorites",            favorites.size,         favorites.firstOrNull(), Icons.Filled.Favorite, GlassTokens.Danger))
-        add(Album("videos",   "Videos",              videos.size,            videos.firstOrNull(), Icons.Filled.PlayCircle, GlassTokens.AccentBlue))
-        add(Album("screenshots","Screenshots",       screenshots.size,       screenshots.firstOrNull(), Icons.Filled.Screenshot, GlassTokens.AccentPurple))
-        add(Album("downloads","Downloads",            downloads.size,         downloads.firstOrNull(), Icons.Filled.Download, GlassTokens.Success))
+        add(Album("videos",   "Videos",              videos.size,            videos.firstOrNull(), Icons.Filled.PlayArrow, GlassTokens.AccentBlue))
+        add(Album("screenshots","Screenshots",       screenshots.size,       screenshots.firstOrNull(), Icons.Filled.CropFree, GlassTokens.AccentPurple))
+        add(Album("downloads","Downloads",            downloads.size,         downloads.firstOrNull(), Icons.Filled.ArrowDownward, GlassTokens.Success))
         if (whatsapp.isNotEmpty()) {
-            add(Album("whatsapp","WhatsApp",          whatsapp.size,         whatsapp.firstOrNull(), Icons.Filled.Message, GlassTokens.Success))
+            add(Album("whatsapp","WhatsApp",          whatsapp.size,         whatsapp.firstOrNull(), Icons.Filled.Chat, GlassTokens.Success))
         }
-        add(Album("recent",   "Recently Added",      recentlyAdded.size,     recentlyAdded.firstOrNull(), Icons.Filled.NewReleases, GlassTokens.AccentTeal))
+        add(Album("recent",   "Recently Added",      recentlyAdded.size,     recentlyAdded.firstOrNull(), Icons.Filled.Add, GlassTokens.AccentTeal))
     }
 
     val utilityAlbums = buildList {
         if (showHiddenAlbum) {
             add(Album("hidden", "Hidden", hiddenCount, null, Icons.Filled.Lock, GlassTokens.TextSecondary, isLocked = true))
         }
-        add(Album("deleted", "Recently Deleted", recentlyDeletedCount, null, Icons.Filled.DeleteSweep, GlassTokens.Danger))
+        add(Album("deleted", "Recently Deleted", recentlyDeletedCount, null, Icons.Filled.Delete, GlassTokens.Danger))
     }
 
     LazyColumn(
@@ -99,7 +99,7 @@ fun AlbumsScreen(
                 utilityAlbums.forEachIndexed { idx, album ->
                     if (idx > 0) HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
                     GlassSettingsRow(
-                        icon = album.icon ?: Icons.Filled.Photo,
+                        icon = album.icon ?: Icons.Filled.Image,
                         title = album.name,
                         subtitle = "${album.count} items",
                         iconTint = album.iconTint,

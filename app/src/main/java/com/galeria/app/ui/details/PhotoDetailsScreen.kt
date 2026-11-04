@@ -73,26 +73,26 @@ fun PhotoDetailsScreen(
 
         // Date
         GlassSection(title = "Date & Time") {
-            DetailRow(icon = Icons.Filled.CalendarMonth, label = "Date", value = dateStr)
+            DetailRow(icon = Icons.Filled.DateRange, label = "Date", value = dateStr)
         }
 
         Spacer(Modifier.height(16.dp))
 
         // File info
         GlassSection(title = "File") {
-            DetailRow(icon = Icons.Filled.Description, label = "Name", value = item.name)
+            DetailRow(icon = Icons.Filled.Article, label = "Name", value = item.name)
             HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
-            DetailRow(icon = Icons.Filled.Storage, label = "Size", value = item.sizeFormatted)
+            DetailRow(icon = Icons.Filled.SaveAlt, label = "Size", value = item.sizeFormatted)
             HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
-            DetailRow(icon = Icons.Filled.AspectRatio, label = "Dimensions",
+            DetailRow(icon = Icons.Filled.CropFree, label = "Dimensions",
                 value = if (item.width > 0 && item.height > 0) "${item.width} × ${item.height}" else "—"
             )
             if (item.isVideo) {
                 HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
-                DetailRow(icon = Icons.Filled.Timer, label = "Duration", value = item.durationFormatted)
+                DetailRow(icon = Icons.Filled.Schedule, label = "Duration", value = item.durationFormatted)
             }
             HorizontalDivider(color = GlassTokens.BorderSubtle, thickness = 0.5.dp)
-            DetailRow(icon = Icons.Filled.FolderOpen, label = "Path", value = item.path.ifEmpty { "—" })
+            DetailRow(icon = Icons.Filled.Folder, label = "Path", value = item.path.ifEmpty { "—" })
         }
 
         Spacer(Modifier.height(16.dp))
@@ -100,7 +100,7 @@ fun PhotoDetailsScreen(
         // Type
         GlassSection(title = "Type") {
             DetailRow(
-                icon = if (item.isVideo) Icons.Filled.PlayCircle else Icons.Filled.Image,
+                icon = if (item.isVideo) Icons.Filled.PlayArrow else Icons.Filled.Image,
                 label = "Kind",
                 value = item.mimeType.ifEmpty { "—" }
             )

@@ -265,7 +265,7 @@ private fun SelectionToolbar(
         Text("$count selected", color = GlassTokens.TextPrimary, fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             GlassIconButton(icon = Icons.Filled.Share, onClick = onShare, size = 32.dp)
-            GlassIconButton(icon = Icons.Filled.VisibilityOff, onClick = onHide, size = 32.dp)
+            GlassIconButton(icon = Icons.Filled.Lock, onClick = onHide, size = 32.dp)
             GlassIconButton(icon = Icons.Filled.Delete, onClick = onDelete, tint = GlassTokens.Danger, size = 32.dp)
         }
     }
