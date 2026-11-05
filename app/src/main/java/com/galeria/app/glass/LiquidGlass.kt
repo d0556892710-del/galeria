@@ -145,7 +145,8 @@ half4 main(float2 coord) {
 
 internal object GlassFx {
     val supported: Boolean get() = Build.VERSION.SDK_INT >= 31
-    val refractionSupported: Boolean get() = Build.VERSION.SDK_INT >= 33
+    val refractionSupported: Boolean get() = Build.VERSION.SDK_INT >= 33 && !shaderFailed
+    @Volatile var shaderFailed = false
 
     @RequiresApi(31)
     fun blurSat(blurPx: Float, saturation: Float, inner: android.graphics.RenderEffect?): android.graphics.RenderEffect {
@@ -251,9 +252,14 @@ private class GlassNode(
                 val pad = max(8f, blurPx * 2.5f).roundToInt()
                 var inner: android.graphics.RenderEffect? = null
                 if (GlassFx.refractionSupported && l.refraction > 0f) {
-                    val sh = (shader as? RuntimeShader) ?: GlassFx.newShader().also { shader = it }
-                    val bezel = min(20f * density, min(size.width, size.height) * .36f)
-                    inner = GlassFx.refract(sh, pad.toFloat(), size.width, size.height, radius, bezel, bezel * .85f * l.refraction)
+                    try {
+                        val sh = (shader as? RuntimeShader) ?: GlassFx.newShader().also { shader = it }
+                        val bezel = min(20f * density, min(size.width, size.height) * .36f)
+                        inner = GlassFx.refract(sh, pad.toFloat(), size.width, size.height, radius, bezel, bezel * .85f * l.refraction)
+                    } catch (t: Throwable) {
+                        // A GPU without AGSL support: keep the frosted glass, drop the edge bending.
+                        GlassFx.shaderFailed = true; inner = null
+                    }
                 }
                 el.renderEffect = GlassFx.blurSat(blurPx, l.saturation, inner).asComposeRenderEffect()
                 el.topLeft = IntOffset(-pad, -pad)

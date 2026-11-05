@@ -187,8 +187,11 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
             didInitialScroll = true
         }
     }
+    var lastOrder by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(settings.sort, vm.filter) {
-        if (didInitialScroll) gridState.requestScrollToItem(items.size)
+        val now = "${settings.sort}/${vm.filter}"
+        if (lastOrder.isNotEmpty() && lastOrder != now) gridState.requestScrollToItem(items.size)
+        lastOrder = now
     }
 
     // Keep the place when the zoom level changes.

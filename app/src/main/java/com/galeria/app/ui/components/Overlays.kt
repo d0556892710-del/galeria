@@ -212,7 +212,8 @@ private fun MenuPanel(
     val w = with(density) { MenuWidth.toPx() }
     val margin = with(density) { 10.dp.toPx() }
     var h by remember { mutableIntStateOf(0) }
-    val x = if (rtl) anchor.left.coerceIn(margin, screenW - w - margin) else (anchor.right - w).coerceIn(margin, screenW - w - margin)
+    val maxX = (screenW - w - margin).coerceAtLeast(margin)
+    val x = if (rtl) anchor.left.coerceIn(margin, maxX) else (anchor.right - w).coerceIn(margin, maxX)
     val rawY = anchor.top - if (sub) with(density) { 6.dp.toPx() } else 0f
     val y = if (h > 0) rawY.coerceIn(margin * 4, (screenH - h - margin * 4).coerceAtLeast(margin * 4)) else rawY
     val scale = remember { Animatable(.3f) }
