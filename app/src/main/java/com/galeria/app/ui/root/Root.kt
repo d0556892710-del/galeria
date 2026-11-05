@@ -107,6 +107,7 @@ import com.galeria.app.ui.theme.Type
 import com.galeria.app.ui.theme.isDark
 import com.galeria.app.ui.viewer.Viewer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun PhotosRoot(vm: AppViewModel) {
@@ -537,7 +538,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
 }
 
 private fun kotlinx.coroutines.CoroutineScope.launchScrollToBottom(state: LazyGridState, index: Int) {
-    kotlinx.coroutines.launch { state.animateScrollToItem(index) }
+    launch { state.animateScrollToItem(index) }
 }
 
 @Composable

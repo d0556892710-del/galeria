@@ -66,6 +66,7 @@ import com.galeria.app.glass.Backdrop
 import com.galeria.app.ui.theme.LocalPalette
 import com.galeria.app.ui.theme.Type
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 data class MenuItem(
@@ -217,10 +218,8 @@ private fun MenuPanel(
     val scale = remember { Animatable(.3f) }
     val fade = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.coroutineScope {
-            kotlinx.coroutines.launch { scale.animateTo(1f, spring(dampingRatio = .72f, stiffness = 520f)) }
-            kotlinx.coroutines.launch { fade.animateTo(1f, tween(140)) }
-        }
+        launch { scale.animateTo(1f, spring(dampingRatio = .72f, stiffness = 520f)) }
+        launch { fade.animateTo(1f, tween(140)) }
     }
     val dimScale by androidx.compose.animation.core.animateFloatAsState(if (dimmed) .965f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "dim")
     GlassSurface(
