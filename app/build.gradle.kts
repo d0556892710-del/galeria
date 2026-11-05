@@ -16,6 +16,16 @@ android {
         versionName = "2.0"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Fixed key so every new build installs over the previous one.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     androidResources {
         generateLocaleConfig = false
     }
