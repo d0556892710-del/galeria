@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -40,7 +43,11 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+
+      - name: Show compile errors
+        if: failure()
+        run: grep -E "^e: |error:|FAILURE|What went wrong" -A3 build.log | head -200 || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -48,6 +55,15 @@ jobs:
           name: galeria-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Publish APK to the "latest" release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk Photos.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest Photos.apk --title "Photos (latest build)" --notes "Built from ${GITHUB_SHA::7}" --latest
 
       - name: Report APK size
         run: |
