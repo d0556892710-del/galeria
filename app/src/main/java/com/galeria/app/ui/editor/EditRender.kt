@@ -208,7 +208,7 @@ object EditRender {
         val m = matrix(p, w, h)
         val inv = Matrix().also { m.invert(it) }
         val (bw, bh) = baseSize(p, w, h)
-        val c = floatArrayOf(p.crop.centerX() * bw, p.crop.centerY() * bh)
+        val c = floatArrayOf(p.crop.center.x * bw, p.crop.center.y * bh)
         inv.mapPoints(c)
         val half = hypot(p.crop.width * bw, p.crop.height * bh) / 2f
         runCatching { rs.setFloatUniform("vcenter", c[0], c[1]) }
