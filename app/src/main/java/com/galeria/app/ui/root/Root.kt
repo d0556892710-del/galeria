@@ -303,7 +303,6 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
             }
         }
     }
-    val subtitle = subtitleState.value
 
     val selectedItems = if (vm.selecting) items.filter { it.id in vm.selected } else emptyList()
 
@@ -416,7 +415,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 }, Modifier.onRootRect { moreRect = it })
                 GlassIconButton(backdrop, Sym.person, stringResource(R.string.settings), { vm.push(Page.Settings) }, iconSize = 24.dp, iconTint = p.secondaryLabel)
             }
-            else -> TopBar(if (picker != null) stringResource(R.string.choose_items) else stringResource(R.string.tab_library), subtitle) {
+            else -> TopBar(if (picker != null) stringResource(R.string.choose_items) else stringResource(R.string.tab_library), { subtitleState.value }) {
                 if (picker != null) {
                     GlassTextButton(backdrop, stringResource(R.string.cancel), { bridge.cancelPick() })
                     if (picker.multiple) GlassTextButton(backdrop, stringResource(R.string.add), { bridge.finishPick(selectedItems) }, color = p.blue)

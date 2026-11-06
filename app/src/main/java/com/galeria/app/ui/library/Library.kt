@@ -36,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,7 +79,11 @@ import kotlin.math.roundToInt
 
 /** Large title + subtitle on the leading side, glass buttons on the trailing side. */
 @Composable
-fun TopBar(title: String, subtitle: String?, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
+fun TopBar(title: String, subtitle: String?, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) =
+    TopBar(title, { subtitle }, modifier, actions)
+
+@Composable
+fun TopBar(title: String, subtitle: () -> String?, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
     val p = LocalPalette.current
     Row(
         modifier
@@ -89,12 +94,16 @@ fun TopBar(title: String, subtitle: String?, modifier: Modifier = Modifier, acti
     ) {
         Column(Modifier.weight(1f).padding(top = 1.dp)) {
             Text(title, style = Type.largeTitle, color = p.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (!subtitle.isNullOrEmpty()) {
-                Text(subtitle, style = Type.subheadSemibold, color = p.label.copy(alpha = .82f), maxLines = 1)
-            }
+            SubtitleText(subtitle)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
     }
+}
+
+@Composable
+private fun SubtitleText(subtitle: () -> String?) {
+    val s = subtitle()
+    if (!s.isNullOrEmpty()) Text(s, style = Type.subheadSemibold, color = LocalPalette.current.label.copy(alpha = .82f), maxLines = 1)
 }
 
 data class MonthGroup(val key: Int, val items: List<Media>, val cover: Media)
@@ -236,7 +245,7 @@ fun FastScroller(
     val density = LocalDensity.current
     var dragging by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
-    val scrolling = state.isScrollInProgress
+    val scrolling by remember { derivedStateOf { state.isScrollInProgress } }
     LaunchedEffect(scrolling, dragging) {
         if (scrolling || dragging) visible = true else {
             delay(1400); visible = false
@@ -246,32 +255,40 @@ fun FastScroller(
     val scope = rememberCoroutineScope()
     var dragFraction by remember { mutableFloatStateOf(0f) }
     val thumbH = 58.dp
-    BoxWithConstraints(Modifier.fillMaxSize().padding(top = topPadding, bottom = bottomPadding)) {
-        val trackPx = with(density) { (maxHeight - thumbH).toPx() }.coerceAtLeast(1f)
+    // Read in the layout phase only, so scrolling never recomposes this.
+    fun scrollFraction(): Float {
         val totalRows = (items.size + columns - 1) / columns
         val visibleRows = max(1, state.layoutInfo.visibleItemsInfo.size / columns)
-        val scrollFraction = (state.firstVisibleItemIndex / columns).toFloat() / max(1, totalRows - visibleRows)
-        val f = (if (dragging) dragFraction else scrollFraction).coerceIn(0f, 1f)
-        val y = (f * trackPx).roundToInt()
-        if (dragging) {
-            val idx = ((items.size - 1) * f).roundToInt().coerceIn(0, items.size - 1)
+        return ((state.firstVisibleItemIndex / columns).toFloat() / max(1, totalRows - visibleRows)).coerceIn(0f, 1f)
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().padding(top = topPadding, bottom = bottomPadding)) {
+        val trackPx = with(density) { (maxHeight - thumbH).toPx() }.coerceAtLeast(1f)
+        val bubbleText by remember(items, fmt) {
+            derivedStateOf {
+                if (!dragging) null
+                else fmt.monthYearShort(items[((items.size - 1) * dragFraction).roundToInt().coerceIn(0, items.size - 1)].dateTaken)
+            }
+        }
+        val bubble = bubbleText
+        if (bubble != null) {
             GlassSurface(
                 backdrop,
                 Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, y + with(density) { 9.dp.roundToPx() }) }
+                    .offset { IntOffset(0, (dragFraction * trackPx).roundToInt() + 9.dp.roundToPx()) }
                     .padding(end = 58.dp)
                     .heightIn(min = 40.dp),
                 RoundedCornerShape(20.dp),
             ) {
-                Text(fmt.monthYearShort(items[idx].dateTaken), style = Type.headline, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                Text(bubble, style = Type.headline, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
             }
         }
+        val shown = alpha > .05f
         GlassSurface(
             backdrop,
             Modifier
                 .align(Alignment.TopEnd)
-                .offset { IntOffset(0, y) }
+                .offset { IntOffset(0, ((if (dragging) dragFraction else scrollFraction()) * trackPx).roundToInt()) }
                 .padding(end = 6.dp)
                 .size(40.dp, thumbH)
                 .graphicsLayer {
@@ -280,9 +297,9 @@ fun FastScroller(
                     scaleX = s; scaleY = s
                 }
                 .then(
-                    if (alpha > .05f) Modifier.pointerInput(items.size, columns) {
+                    if (shown) Modifier.pointerInput(items.size, columns) {
                         detectVerticalDragGestures(
-                            onDragStart = { dragging = true; dragFraction = scrollFraction },
+                            onDragStart = { dragging = true; dragFraction = scrollFraction() },
                             onDragEnd = { dragging = false },
                             onDragCancel = { dragging = false },
                         ) { change, dy ->

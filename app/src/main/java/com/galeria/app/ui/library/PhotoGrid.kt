@@ -128,6 +128,12 @@ fun PhotoGrid(
         else -> 2.dp
     }
     val monthLabels = columns >= 5
+    val monthStart = remember(items, fmt, monthLabels) {
+        if (!monthLabels) BooleanArray(0) else {
+            var last = Int.MIN_VALUE
+            BooleanArray(items.size) { i -> val k = fmt.monthKey(items[i].dateTaken); val start = k != last; last = k; start }
+        }
+    }
 
     BoxWithConstraints(
         modifier
@@ -178,7 +184,7 @@ fun PhotoGrid(
         ) {
             if (header != null) item(key = "header", span = { GridItemSpan(maxLineSpan) }, contentType = 3) { header() }
             itemsIndexed(items, key = { _, m -> m.id }, contentType = { _, _ -> 1 }) { i, m ->
-                val label = monthLabels && (i == 0 || fmt.monthKey(items[i - 1].dateTaken) != fmt.monthKey(m.dateTaken))
+                val label = monthLabels && monthStart.getOrElse(i) { false }
                 GridCell(
                     m = m,
                     px = cellPx,
@@ -222,14 +228,14 @@ private fun GridCell(
     val ratio = if (columns == 1) m.aspect.coerceIn(.75f, 1.6f) else 1f
     val small = columns >= 9
     val kind = if (m.isVideo) R.string.video else if (m.isScreenshot) R.string.screenshot else R.string.photo
-    val desc = androidx.compose.ui.res.stringResource(kind) + ", " + fmt.medium(m.dateTaken)
+    val kindText = androidx.compose.ui.res.stringResource(kind)
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(ratio)
             .then(if (monthLabel) Modifier.zIndex(2f) else Modifier)
             .combinedClickable(interaction, indication = null, onLongClick = onLongPress, onClick = onClick)
-            .semantics { contentDescription = desc; if (selecting) selected = isSelected }
+            .semantics { contentDescription = kindText + ", " + fmt.medium(m.dateTaken); if (selecting) selected = isSelected }
     ) {
         Box(
             Modifier

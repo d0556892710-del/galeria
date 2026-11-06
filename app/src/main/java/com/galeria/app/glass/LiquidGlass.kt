@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.CompositingStrategy
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -62,7 +63,7 @@ class Backdrop {
 @Composable
 fun rememberBackdrop(): Backdrop = remember { Backdrop() }
 
-fun Modifier.backdropSource(backdrop: Backdrop): Modifier = this then SourceElement(backdrop)
+fun Modifier.backdropSource(backdrop: Backdrop): Modifier = this.graphicsLayer().then(SourceElement(backdrop))
 
 private data class SourceElement(val backdrop: Backdrop) : ModifierNodeElement<SourceNode>() {
     override fun create() = SourceNode(backdrop)
@@ -179,7 +180,7 @@ fun Modifier.liquidGlass(
     density: Float,
     tint: Color? = null,
     highlight: Float = 1f,
-): Modifier = this then GlassElement(backdrop, shape, look, density, tint, highlight)
+): Modifier = this.graphicsLayer().then(GlassElement(backdrop, shape, look, density, tint, highlight))
 
 private data class GlassElement(
     val backdrop: Backdrop?,
@@ -207,6 +208,8 @@ private class GlassNode(
     private var effectLayer: GraphicsLayer? = null
     private var pos = Offset.Zero
     private var shader: Any? = null
+    private var effectKey: Any? = null
+    private var effect: androidx.compose.ui.graphics.RenderEffect? = null
     private val listener: () -> Unit = { if (isAttached) invalidateDraw() }
 
     fun update(b: Backdrop?, s: Shape, l: GlassLook, d: Float, t: Color?, h: Float) {
@@ -250,6 +253,8 @@ private class GlassNode(
             if (src != null && el != null && GlassFx.supported) {
                 val blurPx = l.blurDp * density
                 val pad = max(8f, blurPx * 2.5f).roundToInt()
+                val key = listOf(size.width.roundToInt(), size.height.roundToInt(), radius.roundToInt(), l, density)
+                if (key != effectKey || effect == null) {
                 var inner: android.graphics.RenderEffect? = null
                 if (GlassFx.refractionSupported && l.refraction > 0f) {
                     try {
@@ -261,7 +266,10 @@ private class GlassNode(
                         GlassFx.shaderFailed = true; inner = null
                     }
                 }
-                el.renderEffect = GlassFx.blurSat(blurPx, l.saturation, inner).asComposeRenderEffect()
+                effect = GlassFx.blurSat(blurPx, l.saturation, inner).asComposeRenderEffect()
+                effectKey = key
+                }
+                if (el.renderEffect !== effect) el.renderEffect = effect
                 el.topLeft = IntOffset(-pad, -pad)
                 val b = backdrop!!
                 el.record(IntSize(size.width.roundToInt() + pad * 2, size.height.roundToInt() + pad * 2)) {
@@ -303,7 +311,7 @@ private fun cornerRadius(o: Outline, size: Size): Float = when (o) {
  * progressively blurred and softened, instead of a hard bar.
  */
 fun Modifier.scrollEdge(backdrop: Backdrop?, fromTop: Boolean, tint: Color, blurPx: Float): Modifier =
-    this then EdgeElement(backdrop, fromTop, tint, blurPx)
+    this.graphicsLayer().then(EdgeElement(backdrop, fromTop, tint, blurPx))
 
 private data class EdgeElement(val backdrop: Backdrop?, val fromTop: Boolean, val tint: Color, val blurPx: Float) :
     ModifierNodeElement<EdgeNode>() {
@@ -324,6 +332,8 @@ private class EdgeNode(var backdrop: Backdrop?, var fromTop: Boolean, var tint: 
     private var blurLayer: GraphicsLayer? = null
     private var maskLayer: GraphicsLayer? = null
     private var pos = Offset.Zero
+    private var effectBlur = -1f
+    private var effect: androidx.compose.ui.graphics.RenderEffect? = null
     val listener: () -> Unit = { if (isAttached) invalidateDraw() }
 
     override fun onAttach() {
@@ -356,7 +366,10 @@ private class EdgeNode(var backdrop: Backdrop?, var fromTop: Boolean, var tint: 
         else Brush.verticalGradient(0f to Color.Transparent, .58f to Color.Black.copy(alpha = .9f), 1f to Color.Black)
         if (src != null && bl != null && ml != null && GlassFx.supported && size.height >= 1f) {
             val pad = max(8f, blurPx * 2.5f).roundToInt()
-            bl.renderEffect = GlassFx.blurSat(blurPx, 1.15f, null).asComposeRenderEffect()
+            if (effect == null || effectBlur != blurPx) {
+                effect = GlassFx.blurSat(blurPx, 1.15f, null).asComposeRenderEffect(); effectBlur = blurPx
+            }
+            if (bl.renderEffect !== effect) bl.renderEffect = effect
             bl.topLeft = IntOffset(-pad, -pad)
             val b = backdrop!!
             bl.record(IntSize(size.width.roundToInt() + pad * 2, size.height.roundToInt() + pad * 2)) {
