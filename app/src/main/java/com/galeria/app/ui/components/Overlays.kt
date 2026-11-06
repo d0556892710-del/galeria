@@ -126,6 +126,9 @@ fun OverlayHost(backdrop: Backdrop?, overlays: Overlays) {
         )
         overlays.menus.forEachIndexed { level, (spec, anchor) ->
             val top = level == overlays.menus.lastIndex
+            // Menus are positioned in absolute screen pixels, so their container must start at the
+            // physical left edge in Hebrew too (TopStart would be the right edge there).
+            Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.AbsoluteAlignment.TopLeft) {
             MenuPanel(
                 backdrop = backdrop,
                 spec = spec,
@@ -144,6 +147,7 @@ fun OverlayHost(backdrop: Backdrop?, overlays: Overlays) {
                     }
                 },
             )
+            }
         }
     }
 

@@ -255,7 +255,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
         }
     }
 
-    // Scrolling up into older photos minimises the tab bar; scrolling back down restores it.
+    // Scrolling into older photos minimises the tab bar to Years / Months / All; scrolling back restores it.
     val nested = remember(vm) {
         object : NestedScrollConnection {
             var acc = 0f
@@ -263,7 +263,9 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 if (vm.tab != Tab.Library || vm.searching || vm.selecting || vm.zoom != Zoom.All || vm.picker != null) return Offset.Zero
                 val dy = available.y
                 if (dy == 0f) return Offset.Zero
-                acc = if ((dy > 0) == (acc > 0)) acc + dy else dy
+                // Positive = moving towards older photos (down when newest are on top, up in the iPhone order).
+                val older = if (vm.settings.value.newestFirst) -dy else dy
+                acc = if ((older > 0) == (acc > 0)) acc + older else older
                 if (acc > 60f && !vm.dockMin) vm.dockMin = true
                 else if (acc < -60f && vm.dockMin) vm.dockMin = false
                 return Offset.Zero
