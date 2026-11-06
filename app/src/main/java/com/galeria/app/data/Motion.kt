@@ -30,7 +30,7 @@ data class MediaTags(val live: Set<Long> = emptySet(), val portrait: Set<Long> =
  * in the background, and remembers the answer.
  */
 class MotionStore(private val context: Context) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.w("Photos", "background task failed", e) })
     private val _tags = MutableStateFlow(MediaTags())
     val tags: StateFlow<MediaTags> = _tags.asStateFlow()
 
@@ -51,9 +51,10 @@ class MotionStore(private val context: Context) {
             // Newest first: those are the ones people look at.
             for (m in images.asReversed()) {
                 if (!isActive) break
-                val e = known[m.id]
+                val e = synchronized(known) { known[m.id] }
                 if (e != null && e.modified == m.dateModified) continue
-                known[m.id] = Entry(m.dateModified, detect(m))
+                val flags = detect(m)
+                synchronized(known) { known[m.id] = Entry(m.dateModified, flags) }
                 changed = true
                 if (++sincePublish >= 150) { sincePublish = 0; publish(images); saveCache() }
             }
@@ -63,9 +64,9 @@ class MotionStore(private val context: Context) {
 
     /** Re-read one photo after it was edited. */
     fun rescan(m: Media) = scope.launch {
-        known[m.id] = Entry(m.dateModified, detect(m))
+        val f = detect(m)
+        synchronized(known) { known[m.id] = Entry(m.dateModified, f) }
         val cur = _tags.value
-        val f = known[m.id]!!.flags
         _tags.value = MediaTags(
             if (f and LIVE != 0) cur.live + m.id else cur.live - m.id,
             if (f and PORTRAIT != 0) cur.portrait + m.id else cur.portrait - m.id,
@@ -76,7 +77,7 @@ class MotionStore(private val context: Context) {
     private fun publish(images: List<Media>) {
         val live = HashSet<Long>(); val portrait = HashSet<Long>()
         for (m in images) {
-            val e = known[m.id] ?: continue
+            val e = synchronized(known) { known[m.id] } ?: continue
             if (e.modified != m.dateModified) continue
             if (e.flags and LIVE != 0) live += m.id
             if (e.flags and PORTRAIT != 0) portrait += m.id
@@ -92,13 +93,14 @@ class MotionStore(private val context: Context) {
     private fun loadCache() = runCatching {
         cacheFile.forEachLine { line ->
             val p = line.split(',')
-            if (p.size == 3) known[p[0].toLong()] = Entry(p[1].toLong(), p[2].toInt())
+            if (p.size == 3) synchronized(known) { known[p[0].toLong()] = Entry(p[1].toLong(), p[2].toInt()) }
         }
     }
 
     private fun saveCache() = runCatching {
         val tmp = File(context.filesDir, "media_tags_v1.tmp")
-        tmp.bufferedWriter().use { w -> for ((id, e) in known) { w.write("$id,${e.modified},${e.flags}\n") } }
+        val snapshot = synchronized(known) { HashMap(known) }
+        tmp.bufferedWriter().use { w -> for ((id, e) in snapshot) { w.write("$id,${e.modified},${e.flags}\n") } }
         tmp.renameTo(cacheFile)
     }
 

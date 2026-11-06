@@ -31,7 +31,7 @@ import java.io.File
  */
 class MediaRepository(private val context: Context) {
     private val resolver: ContentResolver = context.contentResolver
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.w("Photos", "background task failed", e) })
 
     private val _library = MutableStateFlow<List<Media>>(emptyList())
     val library: StateFlow<List<Media>> = _library.asStateFlow()

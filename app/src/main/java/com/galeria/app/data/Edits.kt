@@ -80,7 +80,7 @@ class EditStore(private val context: Context) {
     }
 
     /** Decode at full size (capped) for saving. */
-    suspend fun decodeFull(m: Media, maxSide: Int = 8192): Bitmap? = decodePreview(m, maxSide)
+    suspend fun decodeFull(m: Media, maxSide: Int = 6144): Bitmap? = decodePreview(m, maxSide)
 
     /** A frame of a Live Photo's video (for a new key photo). */
     fun frameAt(video: File, us: Long, maxSide: Int): Bitmap? = runCatching {

@@ -276,4 +276,12 @@
     <string name="newest_first">החדשות למעלה</string>
     <string name="oldest_first">החדשות למטה (כמו באייפון)</string>
     <string name="photo_order_footer">בחר אם התמונה האחרונה תופיע בראש הספרייה או בתחתיתה.</string>
+    <string name="crash_title">האפליקציה נסגרה באופן לא צפוי</string>
+    <string name="crash_body">העתק או שתף את הדוח ושלח אותו, כדי שאפשר יהיה לתקן את הבעיה.</string>
+    <string name="crash_copy">העתק דוח</string>
+    <string name="crash_share">שתף דוח</string>
+    <string name="tab_bar_scroll">סרגל שנים · חודשים · הכול</string>
+    <string name="scroll_down">הצג בגלילה למטה</string>
+    <string name="scroll_up">הצג בגלילה למעלה</string>
+    <string name="tab_bar_scroll_footer">בחר באיזה כיוון גלילה סרגל הלשוניות יתכווץ ויציג שנים, חודשים והכול.</string>
 </resources>

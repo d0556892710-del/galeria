@@ -29,6 +29,8 @@ data class AppSettings(
     val newestFirst: Boolean = true,
     val hiddenAlbums: Set<Long> = emptySet(),
     val pinned: List<String> = DefaultPinned,
+    /** The tab bar shrinks to Years · Months · All when scrolling down (true) or up (false). */
+    val shrinkOnScrollDown: Boolean = true,
 )
 
 val DefaultPinned = listOf("fav", "saved", "videos", "shots")
@@ -49,6 +51,7 @@ class SettingsStore(private val context: Context) {
         val newestFirst = booleanPreferencesKey("newest_first")
         val hiddenAlbums = stringSetPreferencesKey("hidden_albums")
         val pinned = stringPreferencesKey("pinned")
+        val shrinkDown = booleanPreferencesKey("shrink_on_scroll_down")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map { p -> p.toSettings() }
@@ -67,7 +70,8 @@ class SettingsStore(private val context: Context) {
         edited = (this[K.edited] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
         newestFirst = this[K.newestFirst] ?: true,
         hiddenAlbums = (this[K.hiddenAlbums] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
-        pinned = this[K.pinned]?.split(',')?.filter { it.isNotBlank() } ?: DefaultPinned,
+        shrinkOnScrollDown = this[K.shrinkDown] ?: true,
+        pinned = (this[K.pinned]?.split(',')?.filter { it.isNotBlank() } ?: DefaultPinned).distinct(),
     )
 
     suspend fun setTheme(v: ThemeMode) = context.store.edit { it[K.theme] = v.name }
@@ -84,13 +88,14 @@ class SettingsStore(private val context: Context) {
         p[K.edited] = cur
     }
 
+    suspend fun setShrinkDown(v: Boolean) = context.store.edit { it[K.shrinkDown] = v }
     suspend fun setNewestFirst(v: Boolean) = context.store.edit { it[K.newestFirst] = v }
     suspend fun setAlbumHidden(id: Long, hidden: Boolean) = context.store.edit { p ->
         val cur = (p[K.hiddenAlbums] ?: emptySet()).toMutableSet()
         if (hidden) cur += id.toString() else cur -= id.toString()
         p[K.hiddenAlbums] = cur
     }
-    suspend fun setPinned(keys: List<String>) = context.store.edit { it[K.pinned] = keys.joinToString(",") }
+    suspend fun setPinned(keys: List<String>) = context.store.edit { it[K.pinned] = keys.distinct().joinToString(",") }
 
     suspend fun addSearch(q: String) = context.store.edit { p ->
         val cur = (p[K.searches] ?: "").split('\u0001').filter { it.isNotBlank() && !it.equals(q, true) }

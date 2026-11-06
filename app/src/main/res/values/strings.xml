@@ -269,4 +269,12 @@
     <string name="newest_first">Newest at the Top</string>
     <string name="oldest_first">Newest at the Bottom (like iPhone)</string>
     <string name="photo_order_footer">Choose whether your latest photo appears at the top of Library or at the bottom.</string>
+    <string name="crash_title">Photos closed unexpectedly</string>
+    <string name="crash_body">Copy or share this report and send it, so the problem can be fixed.</string>
+    <string name="crash_copy">Copy Report</string>
+    <string name="crash_share">Share Report</string>
+    <string name="tab_bar_scroll">Years · Months · All Bar</string>
+    <string name="scroll_down">Show When Scrolling Down</string>
+    <string name="scroll_up">Show When Scrolling Up</string>
+    <string name="tab_bar_scroll_footer">Choose which scroll direction shrinks the tab bar and shows Years, Months and All.</string>
 </resources>

@@ -127,6 +127,14 @@ fun SettingsScreen(vm: AppViewModel, backdrop: Backdrop, onBack: () -> Unit) {
             }
             Footer(stringResource(R.string.photo_order_footer))
 
+            Header(stringResource(R.string.tab_bar_scroll))
+            Group {
+                CheckRow(stringResource(R.string.scroll_down), s.shrinkOnScrollDown) { vm.setShrinkDown(true) }
+                Divider()
+                CheckRow(stringResource(R.string.scroll_up), !s.shrinkOnScrollDown) { vm.setShrinkDown(false) }
+            }
+            Footer(stringResource(R.string.tab_bar_scroll_footer))
+
             Header(stringResource(R.string.liquid_glass))
             Group {
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {

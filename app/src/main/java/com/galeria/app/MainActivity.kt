@@ -189,6 +189,16 @@ class MainActivity : AppCompatActivity(), Bridge {
         cm?.setPrimaryClip(ClipData.newUri(contentResolver, m.displayName.ifBlank { "Photo" }, shareUri(m)))
     }
 
+    override fun copyText(text: String) {
+        getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Photos", text))
+    }
+
+    override fun shareText(text: String) {
+        runCatching {
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
+        }
+    }
+
     override fun openMaps(lat: Double, lon: Double) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=$lat,$lon"))) }
     }

@@ -107,6 +107,8 @@ import com.galeria.app.ui.theme.Type
 import com.galeria.app.ui.theme.isDark
 import com.galeria.app.ui.viewer.Viewer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -263,11 +265,13 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 if (vm.tab != Tab.Library || vm.searching || vm.selecting || vm.zoom != Zoom.All || vm.picker != null) return Offset.Zero
                 val dy = available.y
                 if (dy == 0f) return Offset.Zero
-                // Positive = moving towards older photos (down when newest are on top, up in the iPhone order).
-                val older = if (vm.settings.value.newestFirst) -dy else dy
-                acc = if ((older > 0) == (acc > 0)) acc + older else older
-                if (acc > 60f && !vm.dockMin) vm.dockMin = true
-                else if (acc < -60f && vm.dockMin) vm.dockMin = false
+                // The direction that shrinks the tab bar to Years · Months · All is a setting.
+                acc = if ((dy > 0) == (acc > 0)) acc + dy else dy
+                val down = vm.settings.value.shrinkOnScrollDown
+                val shrink = if (down) acc > 60f else acc < -60f
+                val grow = if (down) acc < -60f else acc > 60f
+                if (shrink && !vm.dockMin) vm.dockMin = true
+                else if (grow && vm.dockMin) vm.dockMin = false
                 return Offset.Zero
             }
         }
@@ -275,6 +279,22 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     // Glass follows scrolling even when the content is drawn in its own layers.
     LaunchedEffect(gridState) {
         androidx.compose.runtime.snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }.collect { backdrop.invalidate() }
+    }
+
+    // A crash last time: offer the report so it can be sent and fixed.
+    LaunchedEffect(Unit) {
+        val f = java.io.File(ctx.filesDir, com.galeria.app.CRASH_FILE)
+        val report = withContext(Dispatchers.IO) { runCatching { if (f.exists()) f.readText().also { f.delete() } else null }.getOrNull() }
+        if (!report.isNullOrBlank()) {
+            delay(600)
+            overlays.sheet(SheetSpec(
+                ctx.getString(R.string.crash_title) + "\n\n" + ctx.getString(R.string.crash_body),
+                listOf(
+                    SheetAction(ctx.getString(R.string.crash_copy)) { bridge.copyText(report); overlays.toast(ctx.getString(R.string.copied)) },
+                    SheetAction(ctx.getString(R.string.crash_share)) { bridge.shareText(report) },
+                ),
+            ))
+        }
     }
 
     // One-time offer to skip the system pop-up for every delete / favourite.

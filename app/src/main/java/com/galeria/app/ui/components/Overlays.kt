@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -213,13 +214,11 @@ private fun MenuPanel(
 ) {
     val density = LocalDensity.current
     val p = LocalPalette.current
-    val w = with(density) { MenuWidth.toPx() }
     val margin = with(density) { 10.dp.toPx() }
-    var h by remember { mutableIntStateOf(0) }
-    val maxX = (screenW - w - margin).coerceAtLeast(margin)
-    val x = if (rtl) anchor.left.coerceIn(margin, maxX) else (anchor.right - w).coerceIn(margin, maxX)
     val rawY = anchor.top - if (sub) with(density) { 6.dp.toPx() } else 0f
-    val y = if (h > 0) rawY.coerceIn(margin * 4, (screenH - h - margin * 4).coerceAtLeast(margin * 4)) else rawY
+    // Open towards the middle of the screen from whichever side the button is on (as iOS does),
+    // using the real size of the window and of the menu, so it can never run off the edge.
+    val openRight = anchor.center.x < screenW / 2f
     val scale = remember { Animatable(.3f) }
     val fade = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -230,13 +229,21 @@ private fun MenuPanel(
     GlassSurface(
         backdrop = backdrop,
         modifier = Modifier
-            .absoluteOffset { IntOffset(x.roundToInt(), y.roundToInt()) }
+            .layout { measurable, c ->
+                val pl = measurable.measure(c.copy(minWidth = 0, minHeight = 0))
+                val fw = c.maxWidth.toFloat(); val fh = c.maxHeight.toFloat()
+                val wantX = if (openRight) anchor.left else anchor.right - pl.width
+                val hiX = fw - pl.width - margin
+                val px = if (hiX < margin) (fw - pl.width) / 2f else wantX.coerceIn(margin, hiX)
+                val hiY = fh - pl.height - margin * 4
+                val py = if (hiY < margin * 4) margin * 4 else rawY.coerceIn(margin * 4, hiY)
+                layout(c.maxWidth, c.maxHeight) { pl.place(px.roundToInt(), py.roundToInt()) }
+            }
             .width(MenuWidth)
-            .onSizeChanged { h = it.height }
             .graphicsLayer {
                 val s = scale.value * dimScale
                 scaleX = s; scaleY = s
-                transformOrigin = TransformOrigin(if (rtl) 0f else 1f, 0f)
+                transformOrigin = TransformOrigin(if (openRight) 0f else 1f, 0f)
             },
         shape = RoundedCornerShape(26.dp),
         elevation = 26.dp,

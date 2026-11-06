@@ -166,6 +166,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun clearSearches() = viewModelScope.launch { store.clearSearches() }
     fun setEdited(id: Long, on: Boolean) = viewModelScope.launch { store.setEdited(id, on) }
     fun setNewestFirst(v: Boolean) = viewModelScope.launch { store.setNewestFirst(v) }
+    fun setShrinkDown(v: Boolean) = viewModelScope.launch { store.setShrinkDown(v) }
     fun setAlbumHidden(id: Long, hidden: Boolean) = viewModelScope.launch { store.setAlbumHidden(id, hidden) }
     fun setPinned(keys: List<String>) = viewModelScope.launch { store.setPinned(keys) }
     fun addViewed(m: Media) = viewModelScope.launch { if (m.id > 0) store.addViewed(m.id) }

@@ -185,9 +185,10 @@ fun PhotoGrid(
                 (v.firstOrNull()?.index ?: 0) to (v.lastOrNull()?.index ?: 0)
             }.distinctUntilChanged().collect { (first, last) ->
                 val hc = handle.headerCount
-                val from = (first - hc - columns * 2).coerceAtLeast(0)
-                val to = (last - hc + 1 + columns * 4).coerceAtMost(items.size)
-                val want = HashSet<Long>(to - from + 1)
+                // Layout info can still describe the previous list for a frame: keep the range valid.
+                val from = (first - hc - columns * 2).coerceIn(0, items.size)
+                val to = (last - hc + 1 + columns * 4).coerceIn(from, items.size)
+                val want = HashSet<Long>(maxOf(16, to - from))
                 for (i in from until to) want += items[i].id
                 val it = jobs.entries.iterator()
                 while (it.hasNext()) {

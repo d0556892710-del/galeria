@@ -22,6 +22,8 @@ interface Bridge {
     fun authenticate(title: String, subtitle: String, onOk: () -> Unit)
     fun setWallpaper(m: Media)
     fun copy(m: Media)
+    fun copyText(text: String)
+    fun shareText(text: String)
     fun openMaps(lat: Double, lon: Double)
     fun requestPermissions()
     fun openAppSettings()

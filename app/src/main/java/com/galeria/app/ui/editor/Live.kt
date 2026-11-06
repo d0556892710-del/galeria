@@ -108,9 +108,9 @@ fun LiveStrip(
                             val c = ev.changes.first()
                             val x = c.position.x
                             when (mode) {
-                                0 -> scrub(usAt(x).coerceIn(ts, te))
+                                0 -> scrub(usAt(x).coerceIn(minOf(ts, te), maxOf(ts, te)))
                                 1 -> trim(usAt(x).coerceIn(0L, (te - 300_000L).coerceAtLeast(0L)), te)
-                                2 -> trim(ts, usAt(x).coerceIn(ts + 300_000L, durationUs))
+                                2 -> trim(ts, usAt(x).coerceIn(minOf(ts + 300_000L, durationUs), durationUs))
                             }
                             c.consume()
                         } while (ev.changes.any { it.pressed })
@@ -150,7 +150,7 @@ fun LiveStrip(
                 val sx = scrubUs.coerceIn(0L, durationUs).toFloat() / durationUs * size.width
                 val selW = max(tw * 1.15f, 34.dp.toPx())
                 val selH = size.height - 2.dp.toPx()
-                val sl = (sx - selW / 2f).coerceIn(0f, size.width - selW)
+                val sl = (sx - selW / 2f).coerceIn(0f, (size.width - selW).coerceAtLeast(0f))
                 val fi = ((scrubUs.toFloat() / durationUs) * n).toInt().coerceIn(0, n - 1)
                 frames.getOrNull(fi)?.let { f -> clipRect(sl, 1.dp.toPx(), sl + selW, 1.dp.toPx() + selH) { drawCover(f, Offset(sl, 1.dp.toPx()), Size(selW, selH)) } }
                 drawRoundRect(Color.White, Offset(sl, 1.dp.toPx()), Size(selW, selH), CornerRadius(5.dp.toPx()), style = Stroke(3.dp.toPx()))

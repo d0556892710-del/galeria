@@ -210,7 +210,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
     suspend fun buildBytes(pp: EditParams): ByteArray? {
         if (!edits.ensureBackup(m)) return null
         if (pp.isIdentity) return edits.backup(m).readBytes()
-        val src = if (pp.keyUs >= 0 && live != null) withContext(Dispatchers.IO) { live!!.frame(pp.keyUs, 8192) } else edits.decodeFull(m)
+        val src = if (pp.keyUs >= 0 && live != null) withContext(Dispatchers.IO) { live!!.frame(pp.keyUs, 6144) } else edits.decodeFull(m)
         src ?: return null
         val out = withContext(Dispatchers.Default) { EditRender.render(src, pp) }
         val png = m.mime.equals("image/png", true)

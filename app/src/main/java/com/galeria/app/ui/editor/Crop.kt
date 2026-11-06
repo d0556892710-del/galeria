@@ -60,12 +60,16 @@ fun applyAspect(p: EditParams, w: Float, h: Float): EditParams {
     val r = aspectRatio(p, bw, bh) ?: return p
     val c = p.crop
     val cw = c.width * bw; val ch = c.height * bh
-    val (nw, nh) = if (cw / ch > r) ch * r to ch else cw to cw / r
+    var (nw, nh) = if (cw / ch > r) ch * r to ch else cw to cw / r
+    nw = min(nw, bw); nh = min(nh, bh)
     val cx = c.center.x * bw; val cy = c.center.y * bh
     var l = cx - nw / 2f; var t = cy - nh / 2f
-    l = l.coerceIn(0f, bw - nw); t = t.coerceIn(0f, bh - nh)
+    l = l.clampTo(0f, bw - nw); t = t.clampTo(0f, bh - nh)
     return p.copy(crop = Rect(l / bw, t / bh, (l + nw) / bw, (t + nh) / bh))
 }
+
+/** coerceIn that never throws: an empty range (from float rounding) collapses to its lower end. */
+internal fun Float.clampTo(lo: Float, hi: Float): Float = if (hi < lo) lo else coerceIn(lo, hi)
 
 /** Rotate the crop with a 90° counter-clockwise turn. */
 fun rotateCrop(c: Rect): Rect = Rect(c.top, 1f - c.right, c.bottom, 1f - c.left)
@@ -151,9 +155,9 @@ fun CropView(bmp: Bitmap, shader: Any?, params: EditParams, onChange: (EditParam
                             val z = ev.calculateZoom()
                             if (z != 1f) {
                                 val cx = (l + r) / 2f; val cy = (t + b) / 2f
-                                var nw = ((r - l) / z).coerceIn(minB, bw); var nh = ((b - t) / z).coerceIn(minB, bh)
+                                var nw = ((r - l) / z).clampTo(minB, bw); var nh = ((b - t) / z).clampTo(minB, bh)
                                 if (ratio != null) { if (nw / nh > ratio) nw = nh * ratio else nh = nw / ratio }
-                                l = (cx - nw / 2f).coerceIn(0f, bw - nw); t = (cy - nh / 2f).coerceIn(0f, bh - nh); r = l + nw; b = t + nh
+                                l = (cx - nw / 2f).clampTo(0f, bw - nw); t = (cy - nh / 2f).clampTo(0f, bh - nh); r = l + nw; b = t + nh
                             }
                         } else {
                             val ch = ev.changes.firstOrNull { it.pressed } ?: ev.changes.first()
@@ -161,17 +165,17 @@ fun CropView(bmp: Bitmap, shader: Any?, params: EditParams, onChange: (EditParam
                             when (mode) {
                                 PAN, PINCH -> {
                                     val nw = r - l; val nh = b - t
-                                    l = (l - d.x).coerceIn(0f, bw - nw); t = (t - d.y).coerceIn(0f, bh - nh); r = l + nw; b = t + nh
+                                    l = (l - d.x).clampTo(0f, bw - nw); t = (t - d.y).clampTo(0f, bh - nh); r = l + nw; b = t + nh
                                 }
                                 else -> {
                                     val mL = mode == 0 || mode == 3 || mode == 4
                                     val mR = mode == 1 || mode == 2 || mode == 6
                                     val mT = mode == 0 || mode == 1 || mode == 5
                                     val mB = mode == 2 || mode == 3 || mode == 7
-                                    if (mL) l = (l + d.x).coerceIn(0f, r - minB)
-                                    if (mR) r = (r + d.x).coerceIn(l + minB, bw)
-                                    if (mT) t = (t + d.y).coerceIn(0f, b - minB)
-                                    if (mB) b = (b + d.y).coerceIn(t + minB, bh)
+                                    if (mL) l = (l + d.x).clampTo(0f, r - minB)
+                                    if (mR) r = (r + d.x).clampTo(l + minB, bw)
+                                    if (mT) t = (t + d.y).clampTo(0f, b - minB)
+                                    if (mB) b = (b + d.y).clampTo(t + minB, bh)
                                     if (ratio != null) {
                                         // Keep the ratio, anchored on the opposite side.
                                         val horizontal = mode == 4 || mode == 6
