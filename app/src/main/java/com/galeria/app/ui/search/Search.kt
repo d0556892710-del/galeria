@@ -144,7 +144,7 @@ fun SearchScreen(
                             .background(p.placeholder)
                             .pressable { onOpen(viewed, m, null) }
                     ) {
-                        AsyncImage(m.thumbModel(320), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        com.galeria.app.ui.components.ThumbImage(m, 320, Modifier.fillMaxSize())
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(.5f to Color.Transparent, 1f to Color.Black.copy(alpha = .5f))))
                         Text(
                             fmt.medium(m.dateTaken),

@@ -42,10 +42,10 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      - name: Build debug APK
+      - name: Build release APK
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
       - name: Show compile errors
         if: failure()
@@ -55,8 +55,8 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: galeria-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: galeria-apk
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
       - name: Publish APK to the "latest" release
@@ -64,13 +64,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk Photos.apk
+          cp app/build/outputs/apk/release/app-release.apk Photos.apk
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest Photos.apk --title "Photos (latest build)" --notes "Built from ${GITHUB_SHA::7}" --latest
 
       - name: Report APK size
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
+          APK=app/build/outputs/apk/release/app-release.apk
           if [ -f "$APK" ]; then
             SIZE=$(du -sh "$APK" | cut -f1)
             echo "## ✅ Build successful" >> $GITHUB_STEP_SUMMARY

@@ -80,6 +80,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -203,7 +204,7 @@ fun Viewer(
     LaunchedEffect(items.isEmpty()) { if (items.isEmpty()) onClosed() }
     val darkBars = p.dark || !chrome
     LaunchedEffect(darkBars) { bridge.setSystemBars(darkBars) }
-    DisposableEffect(Unit) { onDispose { vm.viewingId = null; bridge.setSystemBars(p.dark) } }
+    DisposableEffect(Unit) { onDispose { vm.viewingId = null; overlays.closeMenus(); bridge.setSystemBars(p.dark) } }
 
     // Opening: grow from the tapped cell to the full photo.
     LaunchedEffect(boxSize, vs.key) {
@@ -259,11 +260,16 @@ fun Viewer(
         slideshow = false
     }
 
-    val t = transition.value
-    val dismissY = dismiss.value.y
-    val dismissFade = 1f - min(1f, abs(dismissY) / max(1f, boxSize.height * .45f))
-    val showPager = !closing && t >= 1f
-    val chromeAlpha by animateFloatAsState(if (chrome && !closing && t >= .99f && !slideshow) 1f else 0f, tween(200), label = "chrome")
+    // Animation values are read only in layout / draw lambdas, so the pager never recomposes per frame.
+    val opened by remember { androidx.compose.runtime.derivedStateOf { transition.value >= 1f } }
+    fun dismissFade() = 1f - min(1f, abs(dismiss.value.y) / max(1f, boxSize.height * .45f))
+    val showPager = !closing && opened
+    val chromeAlphaState = animateFloatAsState(if (chrome && !closing && opened && !slideshow) 1f else 0f, tween(200), label = "chrome")
+    val chromeShown by remember { androidx.compose.runtime.derivedStateOf { chromeAlphaState.value > .02f } }
+    val tags by vm.repo.motion.tags.collectAsState()
+    val effects by vm.repo.edits.effects.collectAsState()
+    var livePressed by remember { mutableStateOf(false) }
+    val ctxRes = LocalContext.current.resources
     val bg = if (!chrome || p.dark) Color.Black else Color.White
 
     BoxWithConstraints(
@@ -271,7 +277,7 @@ fun Viewer(
             .fillMaxSize()
             .onGloballyPositioned { boxOrigin = it.positionInRoot(); boxSize = Size(it.size.width.toFloat(), it.size.height.toFloat()) }
     ) {
-        Box(Modifier.fillMaxSize().graphicsLayer { alpha = t * dismissFade }.background(bg))
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = transition.value * dismissFade() }.background(bg))
 
         // ---- pages (also the backdrop for the glass bars) ----
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (showPager) 1f else 0f }.backdropSource(backdrop)) {
@@ -285,12 +291,20 @@ fun Viewer(
             ) { page ->
                 val m = items.getOrNull(page) ?: return@HorizontalPager
                 val zs = zoomOf(m)
+                val isCur = page == pager.currentPage
+                val live = !m.isVideo && m.id in tags.live
                 MediaPage(
                     m = m,
                     zs = zs,
-                    active = page == pager.currentPage && showPager,
+                    active = isCur && showPager,
                     chrome = chrome,
-                    dismissOffset = if (page == pager.currentPage) dismiss.value else Offset.Zero,
+                    dismissOffset = { if (isCur) dismiss.value else Offset.Zero },
+                    live = live,
+                    effect = effects[m.id] ?: com.galeria.app.data.LiveEffect.Live,
+                    livePressed = livePressed && isCur,
+                    onLivePress = { livePressed = it },
+                    motion = vm.repo.motion,
+                    editParams = if (live) remember(m.id, m.dateModified) { com.galeria.app.ui.editor.EditParams.fromJson(vm.repo.edits.params(m.id)) } else null,
                     boxSize = boxSize,
                     onTap = { if (slideshow) slideshow = false else chrome = !chrome },
                     onDismissDrag = { d -> scope.launch { dismiss.snapTo(dismiss.value + d) } },
@@ -306,14 +320,14 @@ fun Viewer(
         // ---- open / close flight ----
         val f = from; val tt = to
         if (!showPager && f != null && tt != null && cur != null) {
-            val r = lerpRect(f, tt, t)
-            AsyncImage(
-                model = cur.thumbModel(400),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .offset { IntOffset(r.left.roundToInt(), r.top.roundToInt()) }
-                    .size(with(density) { r.width.toDp() }, with(density) { r.height.toDp() }),
+            // Positioned in absolute pixels (not mirrored in Hebrew), animated in the layout phase only.
+            com.galeria.app.ui.components.ThumbImage(
+                cur, 512,
+                Modifier.fillMaxSize().layout { measurable, constraints ->
+                    val r = lerpRect(f, tt, transition.value)
+                    val pl = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(max(1, r.width.roundToInt()), max(1, r.height.roundToInt())))
+                    layout(constraints.maxWidth, constraints.maxHeight) { pl.place(r.left.roundToInt(), r.top.roundToInt()) }
+                },
             )
         }
 
@@ -323,9 +337,9 @@ fun Viewer(
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(start = 16.dp, end = 16.dp, top = 4.dp)
-                .graphicsLayer { alpha = chromeAlpha * dismissFade }
+                .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
         ) {
-            if (chromeAlpha > .02f) {
+            if (chromeShown) {
                 GlassIconButton(backdrop, Sym.chevronBack, stringResource(R.string.back), { close() }, Modifier.align(Alignment.CenterStart))
                 GlassSurface(backdrop, Modifier.align(Alignment.Center).heightIn(min = 44.dp).widthIn(max = 240.dp), RoundedCornerShape(22.dp)) {
                     Column(Modifier.padding(horizontal = 18.dp, vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -349,6 +363,21 @@ fun Viewer(
             }
         }
 
+        // ---- LIVE badge ----
+        if (cur != null && !cur.isVideo && cur.id in tags.live) {
+            val eff = effects[cur.id] ?: com.galeria.app.data.LiveEffect.Live
+            Box(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(start = 16.dp, top = 58.dp)
+                    .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
+            ) {
+                if (chromeShown) LiveBadge(backdrop, eff, onMenu = { r ->
+                    overlays.menu(r, liveMenu(eff, ctxRes) { e -> vm.repo.edits.setEffect(cur.id, e) })
+                })
+            }
+        }
+
         // ---- bottom: scrubber strip / video bar + toolbar ----
         if (cur != null) Column(
             Modifier
@@ -356,9 +385,9 @@ fun Viewer(
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = 10.dp)
-                .graphicsLayer { alpha = chromeAlpha * dismissFade; translationY = if (infoOpen) 400f else 0f }
+                .graphicsLayer { alpha = chromeAlphaState.value * dismissFade(); translationY = if (infoOpen) 400f else 0f }
         ) {
-            if (chromeAlpha > .02f) {
+            if (chromeShown) {
                 if (cur.isVideo) VideoBar(backdrop, video)
                 else if (items.size > 1) Strip(items, pager.currentPage) { i -> scope.launch { pager.scrollToPage(i) } }
                 Spacer(Modifier.height(12.dp))
@@ -369,7 +398,7 @@ fun Viewer(
                     onShare = { bridge.share(listOf(cur)) },
                     onFav = { actions.setFavourite(listOf(cur), !cur.isFavorite) },
                     onInfo = { infoOpen = true },
-                    onEdit = { overlays.toast(it) },
+                    onEdit = { msg -> if (cur.isVideo) overlays.toast(msg) else { infoOpen = false; vm.editing = cur } },
                     onDelete = {
                         when (vs.ctx) {
                             ViewerCtx.Hidden -> actions.confirmDeleteForever(listOf(cur))
@@ -419,7 +448,13 @@ private fun MediaPage(
     zs: ZoomState,
     active: Boolean,
     chrome: Boolean,
-    dismissOffset: Offset,
+    dismissOffset: () -> Offset,
+    live: Boolean,
+    effect: com.galeria.app.data.LiveEffect,
+    livePressed: Boolean,
+    onLivePress: (Boolean) -> Unit,
+    motion: com.galeria.app.data.MotionStore,
+    editParams: com.galeria.app.ui.editor.EditParams?,
     boxSize: Size,
     onTap: () -> Unit,
     onDismissDrag: (Offset) -> Unit,
@@ -429,17 +464,26 @@ private fun MediaPage(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val fit = if (boxSize != Size.Zero) fitRect(m, boxSize) else Rect.Zero
+    val canPlayLive by androidx.compose.runtime.rememberUpdatedState(live && effect != com.galeria.app.data.LiveEffect.Off)
+    val livePressCb by androidx.compose.runtime.rememberUpdatedState(onLivePress)
     fun clamp() {
         val maxX = max(0f, (fit.width * zs.scale - boxSize.width) / 2f)
         val maxY = max(0f, (fit.height * zs.scale - boxSize.height) / 2f)
         zs.offset = Offset(zs.offset.x.coerceIn(-maxX, maxX), zs.offset.y.coerceIn(-maxY, maxY))
     }
-    val dScale = 1f - min(.35f, abs(dismissOffset.y) / max(1f, boxSize.height * 1.6f))
     Box(
         Modifier
             .fillMaxSize()
             .pointerInput(m.id) {
                 detectTapGestures(
+                    onPress = {
+                        if (canPlayLive) {
+                            val job = scope.launch { delay(200); livePressCb(true) }
+                            tryAwaitRelease()
+                            job.cancel()
+                            livePressCb(false)
+                        }
+                    },
                     onTap = { onTap() },
                     onDoubleTap = { pos ->
                         scope.launch {
@@ -513,23 +557,34 @@ private fun MediaPage(
                 }
             }
             .graphicsLayer {
+                val d = dismissOffset()
+                val dScale = 1f - min(.35f, abs(d.y) / max(1f, boxSize.height * 1.6f))
                 scaleX = zs.scale * dScale; scaleY = zs.scale * dScale
-                translationX = zs.offset.x + dismissOffset.x
-                translationY = zs.offset.y + dismissOffset.y
+                translationX = zs.offset.x + d.x
+                translationY = zs.offset.y + d.y
             },
         contentAlignment = Alignment.Center,
     ) {
         if (m.isVideo) VideoSurface(m, video, active)
         else {
-            val req = remember(m.uri) {
+            val req = remember(m.uri, m.dateModified) {
                 ImageRequest.Builder(ctx)
                     .data(m.uri)
                     .size(2560)
-                    .placeholderMemoryCacheKey(MemoryCache.Key("${m.uri}#512"))
+                    .memoryCacheKey("${m.uri}@${m.dateModified}")
                     .crossfade(false)
                     .build()
             }
+            // The grid thumbnail shows instantly; the full picture replaces it when decoded.
+            com.galeria.app.ui.components.ThumbImage(m, 512, Modifier.fillMaxSize(), fit = true)
             AsyncImage(req, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+            if (live) {
+                when (effect) {
+                    com.galeria.app.data.LiveEffect.LongExposure -> LongExposureLayer(m, motion, active)
+                    com.galeria.app.data.LiveEffect.Bounce -> BounceLayer(m, motion, active)
+                    else -> LiveLayer(m, video, motion, playing = livePressed || (effect == com.galeria.app.data.LiveEffect.Loop && active), loop = effect == com.galeria.app.data.LiveEffect.Loop, edit = editParams)
+                }
+            }
         }
     }
 }
@@ -626,7 +681,7 @@ private fun Strip(items: List<Media>, current: Int, onSelect: (Int) -> Unit) {
                         .background(LocalPalette.current.placeholder)
                         .pressable { onSelect(i) }
                 ) {
-                    AsyncImage(m.thumbModel(96), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    com.galeria.app.ui.components.ThumbImage(m, 96, Modifier.fillMaxSize())
                 }
             }
         }

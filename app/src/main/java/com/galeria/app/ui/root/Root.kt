@@ -124,7 +124,9 @@ fun PhotosRoot(vm: AppViewModel) {
                 if (!vm.permissionGranted) PermissionScreen()
                 else MainShell(vm, settings)
                 OverlayHost(backdrops.top, overlays)
-                BackHandler(enabled = overlays.anyOpen) {
+                // Composed only while something is open, so it is registered last and always wins:
+                // the phone's Back closes the menu / sheet first, never the screen under it.
+                if (overlays.anyOpen) BackHandler {
                     if (overlays.sheet != null) overlays.closeSheet() else overlays.closeMenus()
                 }
             }
@@ -150,7 +152,9 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     }
 
     val allItems by vm.libraryView.collectAsStateWithLifecycle()
-    val lib by vm.library.collectAsStateWithLifecycle()
+    val lib by vm.visible.collectAsStateWithLifecycle()
+    val tags by vm.tags.collectAsStateWithLifecycle()
+    val effects by vm.effects.collectAsStateWithLifecycle()
     val albums by vm.albums.collectAsStateWithLifecycle()
     val loaded by vm.loaded.collectAsStateWithLifecycle()
     val picker = vm.picker
@@ -170,7 +174,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     val yearsState = rememberLazyListState()
     val colState = rememberLazyListState()
     val months = remember(items, fmt) { monthGroups(items, fmt) }
-    val years = remember(items, fmt) { yearGroups(items, fmt) }
+    val years = remember(items, fmt, settings.newestFirst) { yearGroups(items, fmt, settings.newestFirst) }
 
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -179,18 +183,21 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     val topPx = with(density) { topPad.toPx() }
     val columns = GridLevels[settings.gridLevel.coerceIn(0, GridLevels.lastIndex)]
 
-    // Open at the newest photo, like iOS.
+    // Open at the newest photo: the top when newest-first, the bottom in the iPhone order.
+    val nf = settings.newestFirst
+    val newestIndex = if (nf) 0 else items.size
+    fun atNewest() = if (nf) !gridState.canScrollBackward else !gridState.canScrollForward
     var didInitialScroll by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(items.isNotEmpty()) {
         if (items.isNotEmpty() && !didInitialScroll) {
-            gridState.requestScrollToItem(items.size)
+            gridState.requestScrollToItem(newestIndex)
             didInitialScroll = true
         }
     }
     var lastOrder by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(settings.sort, vm.filter) {
-        val now = "${settings.sort}/${vm.filter}"
-        if (lastOrder.isNotEmpty() && lastOrder != now) gridState.requestScrollToItem(items.size)
+    LaunchedEffect(settings.sort, vm.filter, nf) {
+        val now = "${settings.sort}/${vm.filter}/$nf"
+        if (lastOrder.isNotEmpty() && lastOrder != now) gridState.requestScrollToItem(if (nf) 0 else items.size)
         lastOrder = now
     }
 
@@ -199,13 +206,13 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     LaunchedEffect(columns) {
         val a = levelAnchor ?: return@LaunchedEffect
         levelAnchor = null
-        if (a.second) gridState.requestScrollToItem(items.size) else gridState.requestScrollToItem(a.first.coerceIn(0, items.size))
+        if (a.second) gridState.requestScrollToItem(newestIndex) else gridState.requestScrollToItem(a.first.coerceIn(0, items.size))
     }
     fun changeLevel(d: Int) {
         val nl = (settings.gridLevel + d).coerceIn(0, GridLevels.lastIndex)
         if (nl == settings.gridLevel) return
         val first = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index < items.size && it.offset.y + it.size.height > topPx }?.index ?: gridState.firstVisibleItemIndex
-        levelAnchor = first to !gridState.canScrollForward
+        levelAnchor = first to atNewest()
         vm.setGrid(nl, settings.aspectGrid)
     }
 
@@ -213,10 +220,10 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     var zoomAnchor by remember { mutableStateOf<Int?>(null) }
     var zoomAnchorSet by remember { mutableStateOf(false) }
     fun anchorKey(): Int? = when (vm.zoom) {
-        Zoom.All -> if (!gridState.canScrollForward) null else gridState.layoutInfo.visibleItemsInfo
+        Zoom.All -> if (atNewest()) null else gridState.layoutInfo.visibleItemsInfo
             .firstOrNull { it.index < items.size && it.offset.y + it.size.height > topPx }?.let { fmt.monthKey(items[it.index].dateTaken) }
-        Zoom.Months -> if (!monthsState.canScrollForward) null else months.getOrNull(monthsState.firstVisibleItemIndex)?.key
-        Zoom.Years -> if (!yearsState.canScrollForward) null else years.getOrNull(yearsState.firstVisibleItemIndex)?.year?.times(12)
+        Zoom.Months -> if (if (nf) !monthsState.canScrollBackward else !monthsState.canScrollForward) null else months.getOrNull(monthsState.firstVisibleItemIndex)?.key
+        Zoom.Years -> if (if (nf) !yearsState.canScrollBackward else !yearsState.canScrollForward) null else years.getOrNull(yearsState.firstVisibleItemIndex)?.year?.times(12)
     }
     fun zoomTo(z: Zoom, key: Int? = anchorKey()) {
         if (z == vm.zoom) return
@@ -231,15 +238,18 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
         val key = zoomAnchor
         when (vm.zoom) {
             Zoom.All -> {
-                val i = if (key == null) items.size else items.indexOfFirst { fmt.monthKey(it.dateTaken) >= key }.let { if (it < 0) items.size else it }
+                val i = if (key == null) newestIndex
+                else items.indexOfFirst { if (nf) fmt.monthKey(it.dateTaken) <= key else fmt.monthKey(it.dateTaken) >= key }.let { if (it < 0) newestIndex else it }
                 gridState.requestScrollToItem(i)
             }
             Zoom.Months -> {
-                val i = if (key == null) months.lastIndex else months.indexOfFirst { it.key >= key }.let { if (it < 0) months.lastIndex else it }
+                val newest = if (nf) 0 else months.lastIndex
+                val i = if (key == null) newest else months.indexOfFirst { if (nf) it.key <= key else it.key >= key }.let { if (it < 0) newest else it }
                 monthsState.requestScrollToItem(i.coerceAtLeast(0))
             }
             Zoom.Years -> {
-                val i = if (key == null) years.lastIndex else years.indexOfFirst { it.year >= key / 12 }.let { if (it < 0) years.lastIndex else it }
+                val newest = if (nf) 0 else years.lastIndex
+                val i = if (key == null) newest else years.indexOfFirst { if (nf) it.year <= key / 12 else it.year >= key / 12 }.let { if (it < 0) newest else it }
                 yearsState.requestScrollToItem(i.coerceAtLeast(0))
             }
         }
@@ -288,13 +298,13 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     BackHandler(enabled = vm.picker != null && vm.viewer == null && vm.pages.isEmpty()) { bridge.cancelPick() }
 
     val itemsLabel = ctx.resources.getQuantityString(R.plurals.items_count, items.size, items.size)
-    val subtitleState = remember(items, fmt, loaded, itemsLabel, months, topPx) {
+    val subtitleState = remember(items, fmt, loaded, itemsLabel, months, topPx, settings.newestFirst) {
         androidx.compose.runtime.derivedStateOf<String?> {
             when {
                 vm.searching || vm.tab != Tab.Library -> null
                 vm.zoom == Zoom.All -> when {
                     items.isEmpty() -> if (loaded) itemsLabel else null
-                    !gridState.canScrollForward -> itemsLabel
+                    (if (settings.newestFirst) !gridState.canScrollBackward else !gridState.canScrollForward) -> itemsLabel
                     else -> gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index < items.size && it.offset.y + it.size.height > topPx * .72f }
                         ?.let { fmt.medium(items[it.index].dateTaken) }
                 }
@@ -357,12 +367,17 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                         bottomPadding = bottomPad,
                         onYear = { y -> zoomTo(Zoom.Months, y * 12) },
                         onMonth = { k -> zoomTo(Zoom.All, k) },
+                        newestFirst = settings.newestFirst,
                     )
                     1 -> CollectionsScreen(
                         state = colState,
                         library = lib,
                         albums = albums,
+                        tags = tags,
+                        effects = effects,
                         settings = settings,
+                        onAlbumMenu = { a, r -> overlays.menu(r, albumMenu(vm, ctx, overlays, a, settings)) },
+                        vm = vm,
                         collapsed = vm.collapsed,
                         onToggle = { id -> vm.collapsed = if (id in vm.collapsed) vm.collapsed - id else vm.collapsed + id },
                         onOpen = { vm.push(it) },
@@ -465,7 +480,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 onTab = { t ->
                     if (t == vm.tab) {
                         if (t == Tab.Library) {
-                            if (vm.zoom != Zoom.All) zoomTo(Zoom.All, null) else scope.launchScrollToBottom(gridState, items.size)
+                            if (vm.zoom != Zoom.All) zoomTo(Zoom.All, null) else scope.launchScrollToBottom(gridState, newestIndex)
                         }
                     } else {
                         vm.endSelect(); vm.tab = t; vm.dockMin = false
@@ -536,7 +551,35 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 )
             }
         }
+
+        // ------------------------------ editor ------------------------------
+        vm.editing?.let { m ->
+            key(m.id) {
+                com.galeria.app.ui.editor.Editor(vm, m, onClose = {
+                    vm.editing = null
+                    bridge.setSystemBars(true)
+                })
+            }
+        }
     }
+}
+
+/** Long-press menu of an album: pin, hide. */
+fun albumMenu(vm: AppViewModel, ctx: android.content.Context, overlays: com.galeria.app.ui.components.Overlays, a: Album, s: AppSettings): MenuSpec {
+    val key = "album:${a.id}"
+    val pinned = key in s.pinned
+    return MenuSpec(title = a.name, groups = listOf(
+        listOf(MenuItem(ctx.getString(if (pinned) R.string.unpin else R.string.pin), Sym.pin) {
+            vm.setPinned(if (pinned) s.pinned - key else s.pinned + key)
+        }),
+        listOf(MenuItem(ctx.getString(R.string.hide_album), Sym.eyeSlash, destructive = true) {
+            overlays.sheet(SheetSpec(ctx.getString(R.string.hide_album_msg), listOf(SheetAction(ctx.getString(R.string.hide_album), destructive = true) {
+                vm.setAlbumHidden(a.id, true)
+                if (pinned) vm.setPinned(s.pinned - key)
+                overlays.toast(ctx.getString(R.string.album_hidden))
+            })))
+        }),
+    ))
 }
 
 private fun kotlinx.coroutines.CoroutineScope.launchScrollToBottom(state: LazyGridState, index: Int) {

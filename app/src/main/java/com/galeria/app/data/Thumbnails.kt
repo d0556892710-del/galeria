@@ -16,7 +16,7 @@ import coil.request.Options
  * Grid thumbnails come straight from Android's own thumbnail cache (ContentResolver.loadThumbnail),
  * which is what makes scrolling a large library fast. Sizes are bucketed so zoom levels share entries.
  */
-data class Thumb(val uri: Uri, val px: Int)
+data class Thumb(val uri: Uri, val px: Int, val version: Long = 0L)
 
 fun thumbBucket(px: Int): Int = when {
     px <= 96 -> 96
@@ -43,5 +43,5 @@ class ThumbFetcher(private val data: Thumb, private val context: Context) : Fetc
 }
 
 class ThumbKeyer : Keyer<Thumb> {
-    override fun key(data: Thumb, options: Options): String = "${data.uri}#${data.px}"
+    override fun key(data: Thumb, options: Options): String = "${data.uri}#${data.px}#${data.version}"
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -68,11 +69,14 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
         backdrops.list.add(backdrop)
         onDispose { backdrops.list.remove(backdrop) }
     }
-    val lib by vm.library.collectAsState()
+    val lib by (if (page is Page.Bucket && page.fromHidden) vm.library else vm.visible).collectAsState()
     val settings by vm.settings.collectAsState()
     val trashed by vm.trashed.collectAsState()
     val hidden by vm.hidden.collectAsState()
-    val items = remember(page, lib, settings, trashed, hidden) { vm.pageItems(page, lib, settings, trashed, hidden) }
+    val tags by vm.tags.collectAsState()
+    val effects by vm.effects.collectAsState()
+    val hiddenAlbums by vm.hiddenAlbums.collectAsState()
+    val items = remember(page, lib, settings, trashed, hidden, tags, effects) { vm.pageItems(page, lib, settings, trashed, hidden, tags, effects) }
     val locked = page.locked && settings.lockAlbums && page !in vm.unlocked
     var selecting by remember(page) { mutableStateOf(false) }
     var selected by remember(page) { mutableStateOf<Set<Long>>(emptySet()) }
@@ -89,6 +93,12 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
         SettingsScreen(vm, backdrop, onBack)
         return
     }
+    if (page.isList) {
+        SectionListPage(vm, page, backdrop, onBack)
+        return
+    }
+    val overlays = com.galeria.app.ui.components.LocalOverlays.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -113,7 +123,21 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
                     onToggle = { m -> selected = if (m.id in selected) selected - m.id else selected + m.id },
                     onLongPress = { m -> selecting = true; selected = selected + m.id },
                     daysLeft = if (page == Page.Deleted) ({ m -> daysLeft(m) }) else null,
-                    header = { PageHeader(title, page, items) },
+                    header = {
+                        Column {
+                            PageHeader(title, page, items)
+                            if (page == Page.Hidden && hiddenAlbums.isNotEmpty()) HiddenAlbumsRow(hiddenAlbums, onOpen = { a ->
+                                vm.unlocked = vm.unlocked + Page.Hidden
+                                vm.push(Page.Bucket(a.id, a.name, fromHidden = true))
+                            }, onMenu = { a, r ->
+                                overlays.menu(r, com.galeria.app.ui.components.MenuSpec(title = a.name, groups = listOf(listOf(
+                                    com.galeria.app.ui.components.MenuItem(ctx.getString(R.string.unhide_album), Sym.eye) {
+                                        vm.setAlbumHidden(a.id, false); overlays.toast(ctx.getString(R.string.album_unhidden))
+                                    }
+                                ))))
+                            })
+                        }
+                    },
                     footer = if (items.isNotEmpty()) ({ GridFooter(items) }) else null,
                 )
             }
@@ -224,6 +248,20 @@ fun pageTitle(page: Page): String = when (page) {
     Page.Hidden -> stringResource(R.string.hidden)
     Page.Deleted -> stringResource(R.string.recently_deleted)
     Page.Settings -> stringResource(R.string.settings)
+    Page.AllAlbums -> stringResource(R.string.albums)
+    Page.MediaTypesList -> stringResource(R.string.media_types)
+    Page.UtilitiesList -> stringResource(R.string.utilities)
+    Page.PinnedList -> stringResource(R.string.pinned)
+    Page.LivePhotos -> stringResource(R.string.mt_live)
+    Page.Portrait -> stringResource(R.string.mt_portrait)
+    Page.SlowMo -> stringResource(R.string.mt_slomo)
+    Page.TimeLapse -> stringResource(R.string.mt_timelapse)
+    Page.Bursts -> stringResource(R.string.mt_bursts)
+    Page.Raw -> stringResource(R.string.mt_raw)
+    Page.Animated -> stringResource(R.string.mt_animated)
+    Page.Selfies -> stringResource(R.string.mt_selfies)
+    Page.LongExposure -> stringResource(R.string.mt_long)
+    Page.RecentlyEdited -> stringResource(R.string.recently_edited)
 }
 
 @Composable
@@ -234,4 +272,22 @@ private fun emptyText(page: Page): Pair<String, String?> = when (page) {
     Page.RecentlyViewed -> stringResource(R.string.empty_viewed) to stringResource(R.string.empty_viewed_sub)
     Page.Favourites -> stringResource(R.string.no_fmt, stringResource(R.string.favourites)) to stringResource(R.string.empty_fav)
     else -> stringResource(R.string.empty_album) to null
+}
+
+
+@Composable
+private fun HiddenAlbumsRow(albums: List<com.galeria.app.ui.root.Album>, onOpen: (com.galeria.app.ui.root.Album) -> Unit, onMenu: (com.galeria.app.ui.root.Album, androidx.compose.ui.geometry.Rect) -> Unit) {
+    val p = LocalPalette.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Text(stringResource(R.string.hidden_albums), style = Type.title3, color = p.label, modifier = Modifier.padding(start = 20.dp, bottom = 10.dp))
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(albums.size) { i ->
+                val a = albums[i]
+                Box(Modifier.width(132.dp)) { AlbumCard(a, onOpen = { onOpen(a) }, onMenu = { r -> onMenu(a, r) }) }
+            }
+        }
+    }
 }

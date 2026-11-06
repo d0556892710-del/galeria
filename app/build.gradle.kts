@@ -12,8 +12,8 @@ android {
         applicationId = "com.galeria.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
     }
 
     signingConfigs {
@@ -32,7 +32,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Optimised build: R8 + no debug overhead. Debug builds of Compose run several times slower.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -47,6 +52,10 @@ android {
         )
     }
     buildFeatures { compose = true }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
     }
@@ -71,4 +80,5 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.exifinterface)
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

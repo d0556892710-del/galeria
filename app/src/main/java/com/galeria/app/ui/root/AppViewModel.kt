@@ -12,6 +12,8 @@ import com.galeria.app.PhotosApplication
 import com.galeria.app.data.AppSettings
 import com.galeria.app.data.GlassMode
 import com.galeria.app.data.LibFilter
+import com.galeria.app.data.LiveEffect
+import com.galeria.app.data.MediaTags
 import com.galeria.app.data.Media
 import com.galeria.app.data.SortMode
 import com.galeria.app.data.ThemeMode
@@ -31,7 +33,7 @@ data class Album(val id: Long, val name: String, val count: Int, val cover: Medi
 
 /** A screen pushed on top of the tabs (album, utility, media type). */
 sealed class Page(val locked: Boolean = false) {
-    data class Bucket(val id: Long, val name: String) : Page()
+    data class Bucket(val id: Long, val name: String, val fromHidden: Boolean = false) : Page()
     data object Favourites : Page()
     data object Videos : Page()
     data object Screenshots : Page()
@@ -43,6 +45,25 @@ sealed class Page(val locked: Boolean = false) {
     data object Hidden : Page(locked = true)
     data object Deleted : Page(locked = true)
     data object Settings : Page()
+    // Collections section pages
+    data object AllAlbums : Page()
+    data object MediaTypesList : Page()
+    data object UtilitiesList : Page()
+    data object PinnedList : Page()
+    // More media types and utilities
+    data object LivePhotos : Page()
+    data object Portrait : Page()
+    data object SlowMo : Page()
+    data object TimeLapse : Page()
+    data object Bursts : Page()
+    data object Raw : Page()
+    data object Animated : Page()
+    data object Selfies : Page()
+    data object LongExposure : Page()
+    data object RecentlyEdited : Page()
+
+    /** Pages that show a list of collections rather than a photo grid. */
+    val isList: Boolean get() = this == AllAlbums || this == MediaTypesList || this == UtilitiesList || this == PinnedList
 }
 
 enum class ViewerCtx { Library, Page, Search, External, Hidden }
@@ -67,6 +88,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val trashed: StateFlow<List<Media>> = repo.trashed
     val hidden: StateFlow<List<Media>> = repo.hidden.items
     val loaded: StateFlow<Boolean> = repo.loaded
+    val tags: StateFlow<MediaTags> = repo.motion.tags
+    val effects: StateFlow<Map<Long, LiveEffect>> = repo.edits.effects
+
+    /** The library without albums the user hid. */
+    val visible: StateFlow<List<Media>> = combine(repo.library, settings) { lib, s ->
+        if (s.hiddenAlbums.isEmpty()) lib else lib.filter { it.bucketId !in s.hiddenAlbums }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // ---------- UI state (kept across language / theme changes) ----------
     var tab by mutableStateOf(Tab.Library)
@@ -84,13 +112,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var collapsed by mutableStateOf<Set<String>>(emptySet())
     var permissionGranted by mutableStateOf(false)
     var limitedAccess by mutableStateOf(false)
+    /** The photo open in the editor, above the viewer. */
+    var editing by mutableStateOf<Media?>(null)
     /** Ids hidden from the grid while the viewer animates over them. */
     var viewingId by mutableStateOf<Long?>(null)
 
     private val filterState = kotlinx.coroutines.flow.MutableStateFlow(LibFilter.All)
 
     /** The library as shown in All: filtered and sorted. */
-    val libraryView: StateFlow<List<Media>> = combine(repo.library, settings, filterState) { lib, s, f ->
+    val libraryView: StateFlow<List<Media>> = combine(visible, settings, filterState) { lib, s, f ->
         val list = lib.filter { m ->
             when (f) {
                 LibFilter.All -> true
@@ -101,15 +131,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 LibFilter.Screenshots -> m.isScreenshot
             }
         }
-        if (s.sort == SortMode.Added) list.sortedWith(compareBy<Media> { it.dateAdded }.thenBy { it.id }) else list
+        val sorted = if (s.sort == SortMode.Added) list.sortedWith(compareBy<Media> { it.dateAdded }.thenBy { it.id }) else list
+        if (s.newestFirst) sorted.asReversed().toList() else sorted
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val albums: StateFlow<List<Album>> = repo.library.map { lib ->
+    private val allAlbums: StateFlow<List<Album>> = repo.library.map { lib ->
         lib.groupBy { it.bucketId }.map { (id, items) ->
             val latest = items.maxBy { it.dateTaken }
             Album(id, latest.bucketName.ifBlank { "—" }, items.size, latest, latest.dateTaken)
         }.sortedWith(compareByDescending<Album> { it.name.equals("Camera", true) }.thenByDescending { it.latest })
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val albums: StateFlow<List<Album>> = combine(allAlbums, settings) { a, s -> a.filter { it.id !in s.hiddenAlbums } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val hiddenAlbums: StateFlow<List<Album>> = combine(allAlbums, settings) { a, s -> a.filter { it.id in s.hiddenAlbums } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun setLibFilter(f: LibFilter) {
         filter = f; filterState.value = f
@@ -128,6 +164,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun markAskedManage() = viewModelScope.launch { store.setAsked() }
     fun addSearch(q: String) = viewModelScope.launch { if (q.isNotBlank()) store.addSearch(q.trim()) }
     fun clearSearches() = viewModelScope.launch { store.clearSearches() }
+    fun setEdited(id: Long, on: Boolean) = viewModelScope.launch { store.setEdited(id, on) }
+    fun setNewestFirst(v: Boolean) = viewModelScope.launch { store.setNewestFirst(v) }
+    fun setAlbumHidden(id: Long, hidden: Boolean) = viewModelScope.launch { store.setAlbumHidden(id, hidden) }
+    fun setPinned(keys: List<String>) = viewModelScope.launch { store.setPinned(keys) }
     fun addViewed(m: Media) = viewModelScope.launch { if (m.id > 0) store.addViewed(m.id) }
 
     // ---------- navigation ----------
@@ -163,8 +203,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun describe(uri: Uri, mime: String?) = repo.describe(uri, mime)
 
     // ---------- derived collections ----------
-    fun pageItems(p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>): List<Media> = when (p) {
+    fun pageItems(
+        p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>,
+        tags: MediaTags = MediaTags(), effects: Map<Long, LiveEffect> = emptyMap(),
+    ): List<Media> {
+        val raw = rawItems(p, lib, s, trashed, hidden, tags, effects)
+        val chronological = p != Page.RecentlyViewed && p != Page.Deleted && p != Page.Hidden
+        return if (chronological && s.newestFirst) raw.asReversed().toList() else raw
+    }
+
+    private fun rawItems(p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>, tags: MediaTags, effects: Map<Long, LiveEffect>): List<Media> = when (p) {
         is Page.Bucket -> lib.filter { it.bucketId == p.id }
+        Page.LivePhotos -> lib.filter { it.id in tags.live }
+        Page.Portrait -> lib.filter { it.id in tags.portrait }
+        Page.SlowMo -> lib.filter { it.isSlowMo }
+        Page.TimeLapse -> lib.filter { it.isTimeLapse }
+        Page.Bursts -> lib.filter { it.isBurst }
+        Page.Raw -> lib.filter { it.isRaw }
+        Page.Animated -> lib.filter { it.isAnimated }
+        Page.Selfies -> lib.filter { it.isSelfie }
+        Page.LongExposure -> lib.filter { effects[it.id] == LiveEffect.LongExposure }
+        Page.RecentlyEdited -> lib.filter { it.id in s.edited }.sortedBy { it.dateModified }
+        Page.AllAlbums, Page.MediaTypesList, Page.UtilitiesList, Page.PinnedList -> emptyList()
         Page.Favourites -> lib.filter { it.isFavorite }
         Page.Videos -> lib.filter { it.isVideo }
         Page.Screenshots -> lib.filter { it.isScreenshot }
@@ -176,7 +236,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         Page.RecentlyViewed -> {
             val byId = lib.associateBy { it.id }
-            s.viewed.mapNotNull { byId[it] }
+            s.viewed.mapNotNull { byId[it] }.let { if (s.newestFirst) it else it.asReversed().toList() }
         }
         Page.Duplicates -> duplicates(lib)
         Page.Hidden -> hidden

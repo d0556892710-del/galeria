@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.galeria.app.R
+import androidx.compose.foundation.combinedClickable
+import com.galeria.app.ui.components.onRootRect
+import androidx.compose.runtime.setValue
 import com.galeria.app.data.AppSettings
 import com.galeria.app.data.Media
 import com.galeria.app.ui.components.Sym
@@ -59,7 +62,11 @@ fun CollectionsScreen(
     state: LazyListState,
     library: List<Media>,
     albums: List<Album>,
+    tags: com.galeria.app.data.MediaTags,
+    effects: Map<Long, com.galeria.app.data.LiveEffect>,
     settings: AppSettings,
+    onAlbumMenu: (Album, androidx.compose.ui.geometry.Rect) -> Unit,
+    vm: com.galeria.app.ui.root.AppViewModel,
     collapsed: Set<String>,
     onToggle: (String) -> Unit,
     onOpen: (Page) -> Unit,
@@ -67,60 +74,52 @@ fun CollectionsScreen(
     bottomPadding: Dp,
 ) {
     val p = LocalPalette.current
-    val favs = library.filter { it.isFavorite }
-    val videos = library.filter { it.isVideo }
-    val shots = library.filter { it.isScreenshot }
-    val recs = library.filter { it.isScreenRecording }
-    val panos = library.filter { it.isPanorama }
-    val since = System.currentTimeMillis() - 30L * 86_400_000L
-    val saved = library.filter { it.dateAdded >= since && !it.bucketName.equals("Camera", true) }
+    val pinnable = pinnableEntries(vm, library, albums, tags, effects, settings)
+    val pinned = settings.pinned.mapNotNull { pinnable[it] }
+    val types = mediaTypeEntries(library, tags, effects)
+    val utils = utilityEntries(vm, library, settings)
     LazyColumn(
         state = state,
         contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
         modifier = Modifier.fillMaxSize().background(p.background),
     ) {
         item(key = "pinned") {
-            Section("pinned", stringResource(R.string.pinned), collapsed, onToggle) {
+            Section("pinned", stringResource(R.string.pinned), collapsed, onToggle, onTitle = { onOpen(Page.PinnedList) }) {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    item { CoverCard(favs.lastOrNull(), stringResource(R.string.favourites), Sym.heartFill) { onOpen(Page.Favourites) } }
-                    if (saved.isNotEmpty()) item { CoverCard(saved.maxByOrNull { it.dateAdded }, stringResource(R.string.recently_saved), Sym.arrowDownCircle) { onOpen(Page.RecentlySaved) } }
-                    if (videos.isNotEmpty()) item { CoverCard(videos.last(), stringResource(R.string.videos), Sym.video) { onOpen(Page.Videos) } }
-                    if (shots.isNotEmpty()) item { CoverCard(shots.last(), stringResource(R.string.screenshots), Sym.viewfinder) { onOpen(Page.Screenshots) } }
+                    items(pinned, key = { it.key }) { e ->
+                        CoverCard(e.cover, e.title, if (e.key == "fav") Sym.heartFill else e.icon) { onOpen(e.page) }
+                    }
+                    item(key = "+") {
+                        Box(
+                            Modifier.size(116.dp).clip(RoundedCornerShape(20.dp)).background(p.fill).pressable { onOpen(Page.PinnedList) },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Sym.plus, stringResource(R.string.add_to_pinned), Modifier.size(28.dp), tint = p.secondaryLabel) }
+                    }
                 }
             }
         }
         if (albums.isNotEmpty()) item(key = "albums") {
-            Section("albums", stringResource(R.string.albums), collapsed, onToggle) {
+            Section("albums", stringResource(R.string.albums), collapsed, onToggle, onTitle = { onOpen(Page.AllAlbums) }) {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(albums, key = { it.id }) { a -> CoverCard(a.cover, a.name, Sym.photo, count = a.count) { onOpen(Page.Bucket(a.id, a.name)) } }
+                    items(albums, key = { it.id }) { a ->
+                        CoverCard(a.cover, a.name, Sym.photo, count = a.count, onLongPress = { r -> onAlbumMenu(a, r) }) { onOpen(Page.Bucket(a.id, a.name)) }
+                    }
                 }
             }
         }
         item(key = "media") {
-            Section("media", stringResource(R.string.media_types), collapsed, onToggle) {
+            Section("media", stringResource(R.string.media_types), collapsed, onToggle, onTitle = { onOpen(Page.MediaTypesList) }) {
                 Tiles(
-                    buildList {
-                        add(Triple(Sym.video, stringResource(R.string.videos), Page.Videos))
-                        add(Triple(Sym.viewfinder, stringResource(R.string.screenshots), Page.Screenshots))
-                        if (recs.isNotEmpty()) add(Triple(Sym.record, stringResource(R.string.screen_recordings), Page.ScreenRecordings))
-                        if (panos.isNotEmpty()) add(Triple(Sym.panorama, stringResource(R.string.panoramas), Page.Panoramas))
-                    },
+                    types.map { Triple(it.icon, it.title, it.page) },
                     locked = emptySet(),
                     onOpen = onOpen,
                 )
             }
         }
         item(key = "utilities") {
-            Section("utilities", stringResource(R.string.utilities), collapsed, onToggle) {
+            Section("utilities", stringResource(R.string.utilities), collapsed, onToggle, onTitle = { onOpen(Page.UtilitiesList) }) {
                 Tiles(
-                    buildList {
-                        add(Triple(Sym.heart, stringResource(R.string.favourites), Page.Favourites))
-                        add(Triple(Sym.duplicate, stringResource(R.string.duplicates), Page.Duplicates))
-                        if (settings.showHidden) add(Triple(Sym.eyeSlash, stringResource(R.string.hidden), Page.Hidden))
-                        add(Triple(Sym.arrowDownCircle, stringResource(R.string.recently_saved), Page.RecentlySaved))
-                        add(Triple(Sym.trash, stringResource(R.string.recently_deleted), Page.Deleted))
-                        add(Triple(Sym.eye, stringResource(R.string.recently_viewed), Page.RecentlyViewed))
-                    },
+                    utils.map { Triple(it.icon, it.title, it.page) },
                     locked = if (settings.lockAlbums) setOf<Page>(Page.Hidden, Page.Deleted) else emptySet(),
                     onOpen = onOpen,
                 )
@@ -130,7 +129,7 @@ fun CollectionsScreen(
 }
 
 @Composable
-private fun Section(id: String, title: String, collapsed: Set<String>, onToggle: (String) -> Unit, content: @Composable () -> Unit) {
+private fun Section(id: String, title: String, collapsed: Set<String>, onToggle: (String) -> Unit, onTitle: (() -> Unit)? = null, content: @Composable () -> Unit) {
     val p = LocalPalette.current
     val shut = id in collapsed
     val rot by animateFloatAsState(if (shut) -90f else 0f, spring(dampingRatio = .7f, stiffness = 500f), label = "rot")
@@ -140,8 +139,13 @@ private fun Section(id: String, title: String, collapsed: Set<String>, onToggle:
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.then(if (onTitle != null) Modifier.pressable(onClick = onTitle) else Modifier),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                 Text(title, style = Type.title2, color = p.label, maxLines = 1)
                 Icon(Sym.chevronForward, null, Modifier.padding(start = 4.dp, top = 1.dp).size(14.dp), tint = p.secondaryLabel.copy(alpha = .7f))
+                }
             }
             val label = stringResource(if (shut) R.string.expand else R.string.collapse)
             Box(
@@ -163,18 +167,27 @@ private fun Section(id: String, title: String, collapsed: Set<String>, onToggle:
 private val labelShadow = Shadow(Color.Black.copy(alpha = .35f), androidx.compose.ui.geometry.Offset(0f, 1f), 4f)
 
 @Composable
-private fun CoverCard(cover: Media?, title: String, icon: ImageVector, count: Int? = null, onClick: () -> Unit) {
+private fun CoverCard(
+    cover: Media?, title: String, icon: ImageVector, count: Int? = null,
+    onLongPress: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null, onClick: () -> Unit,
+) {
     val p = LocalPalette.current
+    var rect by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     Box(
         Modifier
             .size(116.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(p.fill)
-            .pressable(onClick = onClick)
+            .then(
+                if (onLongPress == null) Modifier.pressable(onClick = onClick)
+                else Modifier
+                    .onRootRect { rect = it }
+                    .combinedClickable(androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null, onLongClick = { onLongPress(rect) }, onClick = onClick)
+            )
             .semantics { contentDescription = title }
     ) {
         if (cover != null) {
-            AsyncImage(cover.thumbModel(320), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            com.galeria.app.ui.components.ThumbImage(cover, 320, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(.45f to Color.Transparent, 1f to Color.Black.copy(alpha = .5f))))
         } else {
             Icon(icon, null, Modifier.align(Alignment.Center).size(34.dp), tint = p.secondaryLabel)

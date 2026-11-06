@@ -21,6 +21,7 @@ class PhotosApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         repo = MediaRepository(this)
         settings = SettingsStore(this)
+        com.galeria.app.data.ThumbLoader.init(this)
     }
 
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
@@ -29,7 +30,7 @@ class PhotosApplication : Application(), ImageLoaderFactory {
             add(ThumbKeyer())
             add(VideoFrameDecoder.Factory())
         }
-        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.35).build() }
+        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.18).build() }
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("img")).maxSizeBytes(256L * 1024 * 1024).build() }
         .crossfade(false)
         .allowRgb565(false)

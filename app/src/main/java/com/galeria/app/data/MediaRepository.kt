@@ -41,6 +41,8 @@ class MediaRepository(private val context: Context) {
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
     val hidden = HiddenStore(context)
+    val motion = MotionStore(context)
+    val edits = EditStore(context)
 
     private var observer: ContentObserver? = null
     private var pending: Job? = null
@@ -67,6 +69,7 @@ class MediaRepository(private val context: Context) {
             val lib = runCatching { query(trashed = false) }.getOrDefault(_library.value)
             _library.value = lib
             _loaded.value = true
+            motion.scan(lib)
             _trashed.value = runCatching { query(trashed = true) }.getOrDefault(emptyList())
         }
     }
@@ -91,6 +94,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.IS_FAVORITE,
             MediaStore.MediaColumns.DATE_EXPIRES,
+            MediaStore.MediaColumns.CAPTURE_FRAMERATE,
         )
         val args = Bundle().apply {
             putString(
@@ -111,6 +115,7 @@ class MediaRepository(private val context: Context) {
             val iBn = c.getColumnIndexOrThrow(proj[12]); val iRel = c.getColumnIndexOrThrow(proj[13])
             val iName = c.getColumnIndexOrThrow(proj[14]); val iFav = c.getColumnIndexOrThrow(proj[15])
             val iExp = c.getColumnIndexOrThrow(proj[16])
+            val iFps = c.getColumnIndex(proj[17])
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
                 val video = c.getInt(iType) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
@@ -138,6 +143,7 @@ class MediaRepository(private val context: Context) {
                     displayName = c.getString(iName) ?: "",
                     isFavorite = c.getInt(iFav) == 1,
                     expiresAt = c.getLong(iExp) * 1000L,
+                    fps = if (iFps >= 0 && !c.isNull(iFps)) c.getFloat(iFps) else 0f,
                 )
             }
         }
@@ -184,6 +190,10 @@ class MediaRepository(private val context: Context) {
 
     fun favoriteRequest(items: List<Media>, favorite: Boolean): IntentSender? = runCatching {
         MediaStore.createFavoriteRequest(resolver, items.map { it.uri }, favorite).intentSender
+    }.getOrNull()
+
+    fun writeRequest(items: List<Media>): IntentSender? = runCatching {
+        MediaStore.createWriteRequest(resolver, items.map { it.uri }).intentSender
     }.getOrNull()
 
     fun deleteRequest(items: List<Media>): IntentSender? = runCatching {

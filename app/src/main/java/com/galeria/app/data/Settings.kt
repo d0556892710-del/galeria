@@ -25,7 +25,13 @@ data class AppSettings(
     val recentSearches: List<String> = emptyList(),
     val viewed: List<Long> = emptyList(),
     val edited: Set<Long> = emptySet(),
+    /** Newest photos at the top (scroll down for older). Off = the iPhone order, newest at the bottom. */
+    val newestFirst: Boolean = true,
+    val hiddenAlbums: Set<Long> = emptySet(),
+    val pinned: List<String> = DefaultPinned,
 )
+
+val DefaultPinned = listOf("fav", "saved", "videos", "shots")
 
 class SettingsStore(private val context: Context) {
     private object K {
@@ -40,6 +46,9 @@ class SettingsStore(private val context: Context) {
         val searches = stringPreferencesKey("recent_searches")
         val viewed = stringPreferencesKey("viewed")
         val edited = stringSetPreferencesKey("edited")
+        val newestFirst = booleanPreferencesKey("newest_first")
+        val hiddenAlbums = stringSetPreferencesKey("hidden_albums")
+        val pinned = stringPreferencesKey("pinned")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map { p -> p.toSettings() }
@@ -56,6 +65,9 @@ class SettingsStore(private val context: Context) {
         recentSearches = (this[K.searches] ?: "").split('\u0001').filter { it.isNotBlank() },
         viewed = (this[K.viewed] ?: "").split(',').mapNotNull { it.toLongOrNull() },
         edited = (this[K.edited] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
+        newestFirst = this[K.newestFirst] ?: true,
+        hiddenAlbums = (this[K.hiddenAlbums] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
+        pinned = this[K.pinned]?.split(',')?.filter { it.isNotBlank() } ?: DefaultPinned,
     )
 
     suspend fun setTheme(v: ThemeMode) = context.store.edit { it[K.theme] = v.name }
@@ -65,6 +77,20 @@ class SettingsStore(private val context: Context) {
     suspend fun setGrid(level: Int, aspect: Boolean) = context.store.edit { it[K.grid] = level; it[K.aspect] = aspect }
     suspend fun setSort(v: SortMode) = context.store.edit { it[K.sort] = v.name }
     suspend fun setAsked() = context.store.edit { it[K.asked] = true }
+
+    suspend fun setEdited(id: Long, on: Boolean) = context.store.edit { p ->
+        val cur = (p[K.edited] ?: emptySet()).toMutableSet()
+        if (on) cur += id.toString() else cur -= id.toString()
+        p[K.edited] = cur
+    }
+
+    suspend fun setNewestFirst(v: Boolean) = context.store.edit { it[K.newestFirst] = v }
+    suspend fun setAlbumHidden(id: Long, hidden: Boolean) = context.store.edit { p ->
+        val cur = (p[K.hiddenAlbums] ?: emptySet()).toMutableSet()
+        if (hidden) cur += id.toString() else cur -= id.toString()
+        p[K.hiddenAlbums] = cur
+    }
+    suspend fun setPinned(keys: List<String>) = context.store.edit { it[K.pinned] = keys.joinToString(",") }
 
     suspend fun addSearch(q: String) = context.store.edit { p ->
         val cur = (p[K.searches] ?: "").split('\u0001').filter { it.isNotBlank() && !it.equals(q, true) }

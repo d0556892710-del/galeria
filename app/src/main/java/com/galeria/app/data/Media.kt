@@ -25,6 +25,8 @@ data class Media(
     val isFavorite: Boolean,
     val expiresAt: Long = 0L,
     val hiddenFile: String? = null,
+    /** Capture frame rate of a video (slow-motion is > 60). */
+    val fps: Float = 0f,
 ) {
     /** Width / height as displayed (orientation applied). */
     val aspect: Float
@@ -44,6 +46,13 @@ data class Media(
             bucketName.contains("Screen record", true) || bucketName.contains("ScreenRecord", true))
     val isPanorama: Boolean get() = !isVideo && (aspect >= 2.4f || aspect <= 1f / 2.4f && displayName.contains("PANO", true))
     val isHidden: Boolean get() = hiddenFile != null
+    val isSlowMo: Boolean get() = isVideo && (fps > 65f || displayName.contains("slow", true) || relativePath.contains("slow", true))
+    val isTimeLapse: Boolean get() = isVideo && (displayName.contains("timelapse", true) || displayName.contains("time_lapse", true) ||
+        displayName.contains("TL_", false) || relativePath.contains("timelapse", true))
+    val isBurst: Boolean get() = !isVideo && (displayName.contains("BURST", true) || relativePath.contains("Burst", true))
+    val isRaw: Boolean get() = mime.contains("dng", true) || mime.contains("raw", true) || displayName.endsWith(".dng", true)
+    val isAnimated: Boolean get() = mime.equals("image/gif", true) || displayName.endsWith(".gif", true)
+    val isSelfie: Boolean get() = !isVideo && (displayName.contains("selfie", true) || relativePath.contains("Selfie", true) || bucketName.contains("Selfie", true))
 }
 
 enum class ThemeMode { System, Light, Dark }

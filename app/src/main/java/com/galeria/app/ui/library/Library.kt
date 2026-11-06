@@ -124,8 +124,9 @@ fun monthGroups(items: List<Media>, fmt: Fmt): List<MonthGroup> {
     return out
 }
 
-fun yearGroups(items: List<Media>, fmt: Fmt): List<YearGroup> =
-    items.groupBy { fmt.yearOf(it.dateTaken) }.toSortedMap().map { (y, l) -> YearGroup(y, l, coverOf(l)) }
+fun yearGroups(items: List<Media>, fmt: Fmt, newestFirst: Boolean = false): List<YearGroup> =
+    items.groupBy { fmt.yearOf(it.dateTaken) }.let { if (newestFirst) it.toSortedMap(compareByDescending<Int> { y -> y }) else it.toSortedMap() }
+        .map { (y, l) -> YearGroup(y, l, coverOf(l)) }
 
 /** Years / Months / All, cross-fading and zooming between each other like iOS. */
 @Composable
@@ -139,10 +140,11 @@ fun LibraryViews(
     bottomPadding: Dp,
     onYear: (Int) -> Unit,
     onMonth: (Int) -> Unit,
+    newestFirst: Boolean = false,
 ) {
     val fmt = rememberFmt()
     val months = remember(items, fmt) { monthGroups(items, fmt) }
-    val years = remember(items, fmt) { yearGroups(items, fmt) }
+    val years = remember(items, fmt, newestFirst) { yearGroups(items, fmt, newestFirst) }
     AnimatedContent(
         targetState = zoom,
         transitionSpec = {
@@ -191,7 +193,7 @@ private fun MonthCard(g: MonthGroup, fmt: Fmt, onClick: () -> Unit) {
             .background(p.placeholder)
             .pressable(onClick = onClick)
     ) {
-        AsyncImage(g.cover.thumbModel(768), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        com.galeria.app.ui.components.ThumbImage(g.cover, 768, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(cardShade))
         Column(Modifier.padding(start = 18.dp, top = 14.dp)) {
             Text(month, style = Type.title1.copy(fontSize = Type.title1.fontSize * .93f, shadow = shadowText), color = Color.White)
@@ -216,7 +218,7 @@ private fun YearCard(g: YearGroup, onClick: () -> Unit) {
             .background(p.placeholder)
             .pressable(onClick = onClick)
     ) {
-        AsyncImage(g.cover.thumbModel(768), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        com.galeria.app.ui.components.ThumbImage(g.cover, 768, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(cardShade))
         Text(
             g.year.toString(), style = Type.largeTitle.copy(shadow = shadowText), color = Color.White,

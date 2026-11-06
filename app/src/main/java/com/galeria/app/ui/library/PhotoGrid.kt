@@ -59,7 +59,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import coil.compose.AsyncImage
+import com.galeria.app.data.ThumbLoader
+import com.galeria.app.ui.components.ThumbImage
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import com.galeria.app.R
 import com.galeria.app.data.Media
 import com.galeria.app.data.Thumb
@@ -75,7 +81,7 @@ import com.galeria.app.ui.theme.Type
 /** Zoom levels of All: columns per row. 3 is the default, like iOS. */
 val GridLevels = listOf(1, 3, 5, 9, 15)
 
-fun Media.thumbModel(px: Int): Any = if (hiddenFile != null) uri else Thumb(uri, thumbBucket(px))
+fun Media.thumbModel(px: Int): Any = if (hiddenFile != null) uri else Thumb(uri, thumbBucket(px), dateModified)
 
 /** Keeps the grid position and answers "where is this photo on screen?" for the viewer animation. */
 @Stable
@@ -170,6 +176,30 @@ fun PhotoGrid(
             }
     ) {
         val cellPx = with(density) { (maxWidth / columns).toPx() }.toInt().coerceAtLeast(48)
+        val bucket = thumbBucket(cellPx)
+        // Warm the cache a few rows ahead (and a couple behind) so new rows appear already filled.
+        LaunchedEffect(handle.state, items, bucket, columns) {
+            val jobs = HashMap<Long, Job>()
+            snapshotFlow {
+                val v = handle.state.layoutInfo.visibleItemsInfo
+                (v.firstOrNull()?.index ?: 0) to (v.lastOrNull()?.index ?: 0)
+            }.distinctUntilChanged().collect { (first, last) ->
+                val hc = handle.headerCount
+                val from = (first - hc - columns * 2).coerceAtLeast(0)
+                val to = (last - hc + 1 + columns * 4).coerceAtMost(items.size)
+                val want = HashSet<Long>(to - from + 1)
+                for (i in from until to) want += items[i].id
+                val it = jobs.entries.iterator()
+                while (it.hasNext()) {
+                    val e = it.next()
+                    if (e.value.isCompleted) it.remove() else if (e.key !in want) { e.value.cancel(); it.remove() }
+                }
+                for (i in from until to) {
+                    val m = items[i]
+                    if (m.id !in jobs && !ThumbLoader.peek(m, bucket).second) jobs[m.id] = launch { ThumbLoader.load(m, bucket) }
+                }
+            }
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             state = handle.state,
@@ -243,15 +273,10 @@ private fun GridCell(
                 .background(if (aspect && columns > 1) p.background else p.placeholder)
                 .graphicsLayer { alpha = if (invisible) 0f else if (pressed) .82f else 1f }
         ) {
-            AsyncImage(
-                model = m.thumbModel(px),
-                contentDescription = null,
-                contentScale = if (aspect && columns > 1) ContentScale.Fit else ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            ThumbImage(m, px, Modifier.fillMaxSize(), fit = aspect && columns > 1)
             if (selecting && isSelected) Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .2f)))
         }
-        val shadow = Type.caption1Semibold.copy(color = Color.White, shadow = Shadow(Color.Black.copy(alpha = .55f), Offset(0f, 1f), 4f))
+        val shadow = BadgeStyle
         if (!small && m.isVideo && m.duration > 0 && days == null) {
             Text(duration(m.duration), style = shadow, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 5.dp, bottom = 4.dp))
         }
@@ -293,6 +318,8 @@ private fun GridCell(
         }
     }
 }
+
+private val BadgeStyle = Type.caption1Semibold.copy(color = Color.White, shadow = Shadow(Color.Black.copy(alpha = .55f), Offset(0f, 1f), 4f))
 
 /** Lets a label overflow the (tiny) cell it is attached to. */
 private fun Modifier.wrapContentWidthUnbounded(): Modifier = this.wrapContentWidth(Alignment.Start, unbounded = true)

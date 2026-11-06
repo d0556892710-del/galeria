@@ -73,6 +73,7 @@ class VideoController(context: Context) {
     var muted by mutableStateOf(false)
     var firstFrame by mutableStateOf(false)
     var aspect by mutableFloatStateOf(0f)
+    var ended by mutableStateOf(false)
     var current: Uri? = null
         private set
 
@@ -80,6 +81,7 @@ class VideoController(context: Context) {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
             override fun onRenderedFirstFrame() { firstFrame = true }
+            override fun onPlaybackStateChanged(state: Int) { ended = state == Player.STATE_ENDED }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.height > 0) aspect = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
             }
@@ -90,8 +92,11 @@ class VideoController(context: Context) {
         if (current == uri) return
         current = uri
         firstFrame = false
+        ended = false
         aspect = 0f
         position = 0L
+        player.repeatMode = Player.REPEAT_MODE_OFF
+        player.volume = if (muted) 0f else 1f
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = true
@@ -99,6 +104,29 @@ class VideoController(context: Context) {
 
     fun stop() {
         player.pause()
+    }
+
+    /** Plays a Live Photo's motion (once, or looping), optionally trimmed. */
+    fun playLive(uri: Uri, loop: Boolean, mute: Boolean, startMs: Long, endMs: Long) {
+        current = uri
+        firstFrame = false
+        ended = false
+        val clip = MediaItem.ClippingConfiguration.Builder()
+            .setStartPositionMs(startMs.coerceAtLeast(0L))
+            .apply { if (endMs > startMs) setEndPositionMs(endMs) }
+            .build()
+        player.setMediaItem(MediaItem.Builder().setUri(uri).setClippingConfiguration(clip).build())
+        player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        player.volume = if (mute) 0f else 1f
+        player.prepare()
+        player.playWhenReady = true
+    }
+
+    fun stopLive() {
+        player.pause()
+        player.repeatMode = Player.REPEAT_MODE_OFF
+        current = null
+        firstFrame = false
     }
 
     fun toggle() {
@@ -153,7 +181,7 @@ fun VideoSurface(m: Media, video: VideoController, active: Boolean) {
                 )
             }
             if (!active || !video.firstFrame || video.current != m.uri) {
-                AsyncImage(m.thumbModel(768), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                com.galeria.app.ui.components.ThumbImage(m, 768, Modifier.fillMaxSize(), fit = true)
             }
         }
     }

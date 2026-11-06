@@ -127,4 +127,60 @@ object Sym {
             }
         }
     }.build()
+
+    // ---- editor & media types ----
+    val flip = build("flip") {
+        s("M12 3v18", 1.6f, .6f)
+        s("M9.5 6.5L3.5 18h6z", 1.9f); f("M14.5 6.5l6 11.5h-6z")
+    }
+    val rotate = build("rotate") {
+        s(rrect(6.5f, 9f, 12f, 11f, 2f), 1.9f)
+        s("M4 8.5a7 7 0 0 1 7-5.5h2", 1.9f); s("M10.5 0.8L13 3l-2.5 2.2", 1.9f)
+    }
+    val live = build("live") {
+        f(circle(12f, 12f, 3f)); s(circle(12f, 12f, 6f), 1.6f)
+        s("M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 1 1 0-19", 1.6f, .9f)
+    }
+    val liveOff = build("liveOff") {
+        f(circle(12f, 12f, 3f)); s(circle(12f, 12f, 6f), 1.6f); s(circle(12f, 12f, 9.5f), 1.6f); s("M3.5 3.5l17 17", 1.9f)
+    }
+    val crop = build("crop") { s("M6 2.5V18h15.5M2.5 6H18v15.5", 2f) }
+    val wand = build("wand") {
+        s("M4 20L15 9", 2.2f); f("M17.5 2.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z")
+        f("M20.5 10l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"); f("M10.5 2l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z")
+    }
+    val portrait = build("portrait") {
+        s(circle(12f, 12f, 9f), 1.8f)
+        s("M12 3l2.5 9M21 12l-9 2.5M12 21l-2.5-9M3 12l9-2.5M18.4 5.6L13.8 13.5M5.6 18.4l4.6-7.9", 1.4f)
+    }
+    val slowmo = build("slowmo") {
+        for (i in 0 until 12) {
+            val a = Math.toRadians(i * 30.0)
+            val x1 = 12f + 6.5f * Math.cos(a).toFloat(); val y1 = 12f + 6.5f * Math.sin(a).toFloat()
+            val x2 = 12f + 9.5f * Math.cos(a).toFloat(); val y2 = 12f + 9.5f * Math.sin(a).toFloat()
+            s("M$x1 ${y1}L$x2 $y2", 1.7f, if (i < 4) 1f else .45f)
+        }
+    }
+    val timelapse = build("timelapse") {
+        for (i in 0 until 16) {
+            val a = Math.toRadians(i * 22.5)
+            val x = 12f + 8.5f * Math.cos(a).toFloat(); val y = 12f + 8.5f * Math.sin(a).toFloat()
+            f(circle(x, y, if (i % 4 == 0) 1.3f else .8f))
+        }
+    }
+    val burst = build("burst") { s(rrect(7f, 7f, 14f, 14f, 2.5f), 1.8f); s("M4.5 17V6.5A2 2 0 0 1 6.5 4.5H17", 1.8f); s("M2 14V4a2 2 0 0 1 2-2h10", 1.5f, .6f) }
+    val raw = build("raw") { s(rrect(2.5f, 5f, 19f, 14f, 3f), 1.8f); s("M6.5 15V9h2.2a1.5 1.5 0 0 1 0 3H6.5M8.8 12l1.4 3M11.5 15l1.5-6 1.5 6M12 13.2h2M15.8 9l1 6 1-4 1 4 1-6", 1.3f) }
+    val animated = build("animated") { s(rrect(3f, 6f, 13f, 13f, 2.5f), 1.8f); s("M7 3h11a3 3 0 0 1 3 3v11", 1.8f); f("M8 9.5v6l5-3z") }
+    val selfie = build("selfie") { s(rrect(3f, 3f, 18f, 18f, 4f), 1.8f); s(circle(12f, 10f, 3f), 1.8f); s("M6.8 18.5a5.5 5.5 0 0 1 10.4 0", 1.8f) }
+    val longExposure = build("longExposure") { s(circle(12f, 12f, 9f), 1.8f); s("M3.5 13c3-1 6-4 8.5-4s5.5 3 8.5 4", 1.6f); s("M5 16.5c2.5-.8 5-3 7-3s4.5 2.2 7 3", 1.3f, .6f) }
+    val pin = build("pin") { s("M9 3h6l-1 6 3 3v1.5H7V12l3-3z", 1.8f); s("M12 13.5V21", 1.8f) }
+    val plus = build("plus") { s("M12 4.5v15M4.5 12h15", 2.2f) }
+    val minus = build("minus") { s("M4.5 12h15", 2.2f) }
+    val edited = build("edited") {
+        s("M3.5 6.5h5.5M13 6.5h7.5M3.5 12h10.5M18 12h2.5M3.5 17.5h3.5M11 17.5h9.5", 1.9f)
+        s(circle(11f, 6.5f, 2f), 1.9f); s(circle(16f, 12f, 2f), 1.9f); s(circle(9f, 17.5f, 2f), 1.9f)
+    }
+    val portraitRect = build("portraitRect") { s(rrect(6.5f, 3f, 11f, 18f, 2.5f), 1.9f) }
+    val landscapeRect = build("landscapeRect") { s(rrect(3f, 6.5f, 18f, 11f, 2.5f), 1.9f) }
+    val folder = build("folder") { s("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", 1.8f) }
 }

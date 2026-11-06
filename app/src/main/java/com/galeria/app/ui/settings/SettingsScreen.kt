@@ -119,6 +119,14 @@ fun SettingsScreen(vm: AppViewModel, backdrop: Backdrop, onBack: () -> Unit) {
                 }
             }
 
+            Header(stringResource(R.string.photo_order))
+            Group {
+                CheckRow(stringResource(R.string.newest_first), s.newestFirst) { vm.setNewestFirst(true) }
+                Divider()
+                CheckRow(stringResource(R.string.oldest_first), !s.newestFirst) { vm.setNewestFirst(false) }
+            }
+            Footer(stringResource(R.string.photo_order_footer))
+
             Header(stringResource(R.string.liquid_glass))
             Group {
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
