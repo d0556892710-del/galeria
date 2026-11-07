@@ -65,8 +65,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk Photos.apk
+          VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          cp Photos.apk "Photos-$VER.apk"
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest Photos.apk --title "Photos (latest build)" --notes "Built from ${GITHUB_SHA::7}" --latest
+          gh release create latest Photos.apk "Photos-$VER.apk" --title "Photos $VER" --notes "Version $VER, built from ${GITHUB_SHA::7}" --latest
 
       - name: Report APK size
         run: |

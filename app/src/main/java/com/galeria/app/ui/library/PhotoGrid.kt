@@ -139,7 +139,8 @@ fun PhotoGrid(
         else -> 2.dp
     }
     // Labels only at the middle zoom levels, at most one per row, so small cells never fill with dates.
-    val showLabels = monthLabels && columns in 5..9
+    // No dates on the photos themselves (as on iPhone): the date shows in the title instead.
+    val showLabels = false && monthLabels
     val monthStart = remember(items, fmt, showLabels, columns) {
         if (!showLabels) BooleanArray(0) else {
             var last = Int.MIN_VALUE
