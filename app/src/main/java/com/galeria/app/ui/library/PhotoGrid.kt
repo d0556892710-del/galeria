@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -95,7 +97,8 @@ class GridHandle(val state: LazyGridState) {
         if (idx < 0) return null
         val info = state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx } ?: return null
         val x = origin.x + info.offset.x
-        val y = origin.y + info.offset.y
+        // Layout offsets are measured from the top of the content, below the top padding.
+        val y = origin.y + info.offset.y - state.layoutInfo.viewportStartOffset
         return Rect(x, y, x + info.size.width, y + info.size.height)
     }
 }
@@ -119,6 +122,8 @@ fun PhotoGrid(
     footer: (@Composable () -> Unit)? = null,
     header: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** Month labels need the grid to be in capture-date order. */
+    monthLabels: Boolean = true,
 ) {
     val p = LocalPalette.current
     val fmt = rememberFmt()
@@ -133,12 +138,38 @@ fun PhotoGrid(
         columns >= 5 -> 1.5.dp
         else -> 2.dp
     }
-    val monthLabels = columns >= 5
-    val monthStart = remember(items, fmt, monthLabels) {
-        if (!monthLabels) BooleanArray(0) else {
+    // Labels only at the middle zoom levels, at most one per row, so small cells never fill with dates.
+    val showLabels = monthLabels && columns in 5..9
+    val monthStart = remember(items, fmt, showLabels, columns) {
+        if (!showLabels) BooleanArray(0) else {
             var last = Int.MIN_VALUE
-            BooleanArray(items.size) { i -> val k = fmt.monthKey(items[i].dateTaken); val start = k != last; last = k; start }
+            var lastLabel = -columns
+            BooleanArray(items.size) { i ->
+                val k = fmt.monthKey(items[i].dateTaken)
+                val start = k != last
+                last = k
+                if (start && i - lastLabel >= columns) { lastLabel = i; true } else false
+            }
         }
+    }
+    // Taps are handled once for the whole grid (not by every cell): far lighter when 400 cells are on screen.
+    var pressedId by remember { mutableStateOf<Long?>(null) }
+    val itemsNow by rememberUpdatedState(items)
+    val selectingNow by rememberUpdatedState(selecting)
+    val openCb by rememberUpdatedState(onOpen)
+    val toggleCb by rememberUpdatedState(onToggle)
+    val longCb by rememberUpdatedState(onLongPress)
+    fun hit(pos: Offset): Media? {
+        val hc = handle.headerCount
+        val list = itemsNow
+        val layout = handle.state.layoutInfo
+        val y = pos.y + layout.viewportStartOffset
+        val info = layout.visibleItemsInfo.firstOrNull { li ->
+            li.index >= hc && li.index < hc + list.size &&
+                pos.x >= li.offset.x && pos.x < li.offset.x + li.size.width &&
+                y >= li.offset.y && y < li.offset.y + li.size.height
+        } ?: return null
+        return list.getOrNull(info.index - hc)
     }
 
     BoxWithConstraints(
@@ -180,14 +211,19 @@ fun PhotoGrid(
         // Warm the cache a few rows ahead (and a couple behind) so new rows appear already filled.
         LaunchedEffect(handle.state, items, bucket, columns) {
             val jobs = HashMap<Long, Job>()
+            var lastFirst = -1
             snapshotFlow {
                 val v = handle.state.layoutInfo.visibleItemsInfo
                 (v.firstOrNull()?.index ?: 0) to (v.lastOrNull()?.index ?: 0)
             }.distinctUntilChanged().collect { (first, last) ->
                 val hc = handle.headerCount
+                // Look further ahead in the direction of the scroll.
+                val forward = first >= lastFirst
+                lastFirst = first
+                val ahead = columns * 6; val behind = columns * 2
                 // Layout info can still describe the previous list for a frame: keep the range valid.
-                val from = (first - hc - columns * 2).coerceIn(0, items.size)
-                val to = (last - hc + 1 + columns * 4).coerceIn(from, items.size)
+                val from = (first - hc - (if (forward) behind else ahead)).coerceIn(0, items.size)
+                val to = (last - hc + 1 + (if (forward) ahead else behind)).coerceIn(from, items.size)
                 val want = HashSet<Long>(maxOf(16, to - from))
                 for (i in from until to) want += items[i].id
                 val it = jobs.entries.iterator()
@@ -197,10 +233,11 @@ fun PhotoGrid(
                 }
                 for (i in from until to) {
                     val m = items[i]
-                    if (m.id !in jobs && !ThumbLoader.peek(m, bucket).second) jobs[m.id] = launch { ThumbLoader.load(m, bucket) }
+                    if (m.id !in jobs && !ThumbLoader.peek(m, bucket).second) jobs[m.id] = launch { ThumbLoader.load(m, bucket, high = false) }
                 }
             }
         }
+        val gridScope = rememberCoroutineScope()
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             state = handle.state,
@@ -211,6 +248,25 @@ fun PhotoGrid(
                 .fillMaxSize()
                 .graphicsLayer {
                     scaleX = pinchScale; scaleY = pinchScale; transformOrigin = pinchOrigin
+                }
+                .pointerInput(handle) {
+                    detectTapGestures(
+                        onPress = { pos ->
+                            // Dim only if it is still a press a moment later (not the start of a scroll).
+                            val job = gridScope.launch { kotlinx.coroutines.delay(70); pressedId = hit(pos)?.id }
+                            tryAwaitRelease()
+                            job.cancel()
+                            pressedId = null
+                        },
+                        onTap = { pos ->
+                            val m = hit(pos) ?: return@detectTapGestures
+                            if (selectingNow) toggleCb(m) else openCb(m, handle.rectOf(m.id))
+                        },
+                        onLongPress = { pos ->
+                            val m = hit(pos) ?: return@detectTapGestures
+                            longCb?.invoke(m)
+                        },
+                    )
                 },
         ) {
             if (header != null) item(key = "header", span = { GridItemSpan(maxLineSpan) }, contentType = 3) { header() }
@@ -227,10 +283,7 @@ fun PhotoGrid(
                     isSelected = m.id in selected,
                     invisible = m.id == hiddenId,
                     days = daysLeft?.invoke(m),
-                    onClick = {
-                        if (selecting) onToggle(m) else onOpen(m, handle.rectOf(m.id))
-                    },
-                    onLongPress = onLongPress?.let { cb -> { cb(m) } },
+                    pressed = { pressedId == m.id },
                 )
             }
             if (footer != null) item(span = { GridItemSpan(maxLineSpan) }, contentType = 2) { footer() }
@@ -250,29 +303,22 @@ private fun GridCell(
     isSelected: Boolean,
     invisible: Boolean,
     days: Int?,
-    onClick: () -> Unit,
-    onLongPress: (() -> Unit)?,
+    pressed: () -> Boolean,
 ) {
     val p = LocalPalette.current
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
     val ratio = if (columns == 1) m.aspect.coerceIn(.75f, 1.6f) else 1f
     val small = columns >= 9
-    val kind = if (m.isVideo) R.string.video else if (m.isScreenshot) R.string.screenshot else R.string.photo
-    val kindText = androidx.compose.ui.res.stringResource(kind)
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(ratio)
             .then(if (monthLabel) Modifier.zIndex(2f) else Modifier)
-            .combinedClickable(interaction, indication = null, onLongClick = onLongPress, onClick = onClick)
-            .semantics { contentDescription = kindText + ", " + fmt.medium(m.dateTaken); if (selecting) selected = isSelected }
     ) {
         Box(
             Modifier
                 .fillMaxSize()
                 .background(if (aspect && columns > 1) p.background else p.placeholder)
-                .graphicsLayer { alpha = if (invisible) 0f else if (pressed) .82f else 1f }
+                .graphicsLayer { alpha = if (invisible) 0f else if (pressed()) .82f else 1f }
         ) {
             ThumbImage(m, px, Modifier.fillMaxSize(), fit = aspect && columns > 1)
             if (selecting && isSelected) Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .2f)))

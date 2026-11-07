@@ -213,7 +213,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     fun changeLevel(d: Int) {
         val nl = (settings.gridLevel + d).coerceIn(0, GridLevels.lastIndex)
         if (nl == settings.gridLevel) return
-        val first = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index < items.size && it.offset.y + it.size.height > topPx }?.index ?: gridState.firstVisibleItemIndex
+        val first = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index < items.size && it.offset.y - gridState.layoutInfo.viewportStartOffset + it.size.height > topPx }?.index ?: gridState.firstVisibleItemIndex
         levelAnchor = first to atNewest()
         vm.setGrid(nl, settings.aspectGrid)
     }
@@ -223,7 +223,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     var zoomAnchorSet by remember { mutableStateOf(false) }
     fun anchorKey(): Int? = when (vm.zoom) {
         Zoom.All -> if (atNewest()) null else gridState.layoutInfo.visibleItemsInfo
-            .firstOrNull { it.index < items.size && it.offset.y + it.size.height > topPx }?.let { fmt.monthKey(items[it.index].dateTaken) }
+            .firstOrNull { it.index < items.size && it.offset.y - gridState.layoutInfo.viewportStartOffset + it.size.height > topPx }?.let { fmt.monthKey(items[it.index].dateTaken) }
         Zoom.Months -> if (if (nf) !monthsState.canScrollBackward else !monthsState.canScrollForward) null else months.getOrNull(monthsState.firstVisibleItemIndex)?.key
         Zoom.Years -> if (if (nf) !yearsState.canScrollBackward else !yearsState.canScrollForward) null else years.getOrNull(yearsState.firstVisibleItemIndex)?.year?.times(12)
     }
@@ -327,7 +327,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 vm.zoom == Zoom.All -> when {
                     items.isEmpty() -> if (loaded) itemsLabel else null
                     (if (settings.newestFirst) !gridState.canScrollBackward else !gridState.canScrollForward) -> itemsLabel
-                    else -> gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index < items.size && it.offset.y + it.size.height > topPx * .72f }
+                    else -> gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index < items.size && it.offset.y - gridState.layoutInfo.viewportStartOffset + it.size.height > topPx * .72f }
                         ?.let { fmt.medium(items[it.index].dateTaken) }
                 }
                 vm.zoom == Zoom.Months -> months.getOrNull(monthsState.firstVisibleItemIndex)?.let { (it.key / 12).toString() }
@@ -366,6 +366,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                                 items = items,
                                 handle = handle,
                                 columns = columns,
+                                monthLabels = settings.sort == SortMode.Captured,
                                 aspect = settings.aspectGrid,
                                 topPadding = topPad,
                                 bottomPadding = bottomPad,
@@ -407,7 +408,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                         bottomPadding = bottomPad,
                     )
                     else -> {
-                        val viewed = remember(lib, settings.viewed) { val m = lib.associateBy { it.id }; settings.viewed.mapNotNull { m[it] } }
+                        val viewed = remember(lib, settings.viewed) { val m = lib.associateBy { it.id }; settings.viewed.distinct().mapNotNull { m[it] } }
                         SearchScreen(
                             library = lib,
                             albums = albums,
@@ -476,7 +477,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
 
         // ------------------------------ fast scroller ------------------------------
         if (!vm.searching && vm.tab == Tab.Library && vm.zoom == Zoom.All && items.isNotEmpty()) {
-            FastScroller(handle, items, columns, backdrop, topPad, bottomPad)
+            FastScroller(handle, items, columns, backdrop, topPad, bottomPad, onLeft = settings.scrollerOnLeft)
         }
 
         // ------------------------------ tab bar / selection bar ------------------------------

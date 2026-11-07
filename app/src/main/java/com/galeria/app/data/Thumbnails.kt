@@ -23,7 +23,9 @@ fun thumbBucket(px: Int): Int = when {
     px <= 192 -> 192
     px <= 320 -> 320
     px <= 512 -> 512
-    else -> 768
+    px <= 768 -> 768
+    px <= 1080 -> 1080
+    else -> 1440
 }
 
 class ThumbFetcher(private val data: Thumb, private val context: Context) : Fetcher {

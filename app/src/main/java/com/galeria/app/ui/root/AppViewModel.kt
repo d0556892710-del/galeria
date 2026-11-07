@@ -132,7 +132,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         val sorted = if (s.sort == SortMode.Added) list.sortedWith(compareBy<Media> { it.dateAdded }.thenBy { it.id }) else list
-        if (s.newestFirst) sorted.asReversed().toList() else sorted
+        (if (s.newestFirst) sorted.asReversed() else sorted).distinctBy { it.id }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val allAlbums: StateFlow<List<Album>> = repo.library.map { lib ->
@@ -167,6 +167,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setEdited(id: Long, on: Boolean) = viewModelScope.launch { store.setEdited(id, on) }
     fun setNewestFirst(v: Boolean) = viewModelScope.launch { store.setNewestFirst(v) }
     fun setShrinkDown(v: Boolean) = viewModelScope.launch { store.setShrinkDown(v) }
+    fun setScrollerLeft(v: Boolean) = viewModelScope.launch { store.setScrollerLeft(v) }
     fun setAlbumHidden(id: Long, hidden: Boolean) = viewModelScope.launch { store.setAlbumHidden(id, hidden) }
     fun setPinned(keys: List<String>) = viewModelScope.launch { store.setPinned(keys) }
     fun addViewed(m: Media) = viewModelScope.launch { if (m.id > 0) store.addViewed(m.id) }
@@ -210,7 +211,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     ): List<Media> {
         val raw = rawItems(p, lib, s, trashed, hidden, tags, effects)
         val chronological = p != Page.RecentlyViewed && p != Page.Deleted && p != Page.Hidden
-        return if (chronological && s.newestFirst) raw.asReversed().toList() else raw
+        // Unique ids always: a repeated id is a duplicate list key, which crashes the grid.
+        return (if (chronological && s.newestFirst) raw.asReversed() else raw).distinctBy { it.id }
     }
 
     private fun rawItems(p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>, tags: MediaTags, effects: Map<Long, LiveEffect>): List<Media> = when (p) {
@@ -237,7 +239,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         Page.RecentlyViewed -> {
             val byId = lib.associateBy { it.id }
-            s.viewed.mapNotNull { byId[it] }.let { if (s.newestFirst) it else it.asReversed().toList() }
+            s.viewed.distinct().mapNotNull { byId[it] }.let { if (s.newestFirst) it else it.asReversed().toList() }
         }
         Page.Duplicates -> duplicates(lib)
         Page.Hidden -> hidden

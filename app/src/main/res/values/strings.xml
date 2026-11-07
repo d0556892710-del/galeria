@@ -277,4 +277,8 @@
     <string name="scroll_down">Show When Scrolling Down</string>
     <string name="scroll_up">Show When Scrolling Up</string>
     <string name="tab_bar_scroll_footer">Choose which scroll direction shrinks the tab bar and shows Years, Months and All.</string>
+    <string name="fast_scroller">Fast Scroller ↑↓</string>
+    <string name="side_right">Right Side</string>
+    <string name="side_left">Left Side</string>
+    <string name="fast_scroller_footer">Where the handle for jumping through the library appears while you scroll.</string>
 </resources>

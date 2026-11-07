@@ -110,6 +110,7 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
                     items = items,
                     handle = handle,
                     columns = 3,
+                    monthLabels = page != Page.RecentlySaved && page != Page.RecentlyViewed && page != Page.Deleted && page != Page.RecentlyEdited,
                     aspect = false,
                     topPadding = top + 58.dp,
                     bottomPadding = bottom + if (selecting || page == Page.Deleted) 96.dp else 24.dp,

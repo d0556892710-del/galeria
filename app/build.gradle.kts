@@ -12,8 +12,8 @@ android {
         applicationId = "com.galeria.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 4
-        versionName = "3.1"
+        versionCode = 5
+        versionName = "3.2"
     }
 
     signingConfigs {

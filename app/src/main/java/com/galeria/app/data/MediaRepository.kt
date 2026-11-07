@@ -29,6 +29,8 @@ import java.io.File
  * (a cursor over ~20k rows takes ~100–200 ms), keeps it in memory sorted by capture date,
  * and refreshes automatically when anything changes on the device.
  */
+private const val SNAP_MAGIC = 0x50484F31 // "PHO1"
+
 class MediaRepository(private val context: Context) {
     private val resolver: ContentResolver = context.contentResolver
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.w("Photos", "background task failed", e) })
@@ -47,7 +49,56 @@ class MediaRepository(private val context: Context) {
     private var observer: ContentObserver? = null
     private var pending: Job? = null
 
+    private val queried = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val publishLock = Any()
+    private val snapshotFile get() = java.io.File(context.filesDir, "library_v1.bin")
+
+    /** The last library seen, shown instantly at launch while the real query runs. */
+    private fun loadSnapshot(): List<Media>? = runCatching {
+        java.io.DataInputStream(java.io.BufferedInputStream(snapshotFile.inputStream(), 1 shl 16)).use { d ->
+            if (d.readInt() != SNAP_MAGIC) return null
+            val n = d.readInt()
+            val out = ArrayList<Media>(n)
+            repeat(n) {
+                val id = d.readLong(); val video = d.readBoolean()
+                out += Media(
+                    id = id,
+                    uri = android.net.Uri.parse(d.readUTF()),
+                    isVideo = video, mime = d.readUTF(),
+                    dateTaken = d.readLong(), dateAdded = d.readLong(), dateModified = d.readLong(),
+                    width = d.readInt(), height = d.readInt(), orientation = d.readInt(),
+                    duration = d.readLong(), size = d.readLong(), bucketId = d.readLong(),
+                    bucketName = d.readUTF(), relativePath = d.readUTF(), displayName = d.readUTF(),
+                    isFavorite = d.readBoolean(), expiresAt = d.readLong(), fps = d.readFloat(),
+                )
+            }
+            out
+        }
+    }.getOrNull()
+
+    private fun saveSnapshot(lib: List<Media>) = runCatching {
+        val tmp = java.io.File(context.filesDir, "library_v1.tmp")
+        java.io.DataOutputStream(java.io.BufferedOutputStream(tmp.outputStream(), 1 shl 16)).use { o ->
+            o.writeInt(SNAP_MAGIC); o.writeInt(lib.size)
+            for (m in lib) {
+                o.writeLong(m.id); o.writeBoolean(m.isVideo); o.writeUTF(m.uri.toString()); o.writeUTF(m.mime)
+                o.writeLong(m.dateTaken); o.writeLong(m.dateAdded); o.writeLong(m.dateModified)
+                o.writeInt(m.width); o.writeInt(m.height); o.writeInt(m.orientation)
+                o.writeLong(m.duration); o.writeLong(m.size); o.writeLong(m.bucketId)
+                o.writeUTF(m.bucketName.take(2000)); o.writeUTF(m.relativePath.take(2000)); o.writeUTF(m.displayName.take(2000))
+                o.writeBoolean(m.isFavorite); o.writeLong(m.expiresAt); o.writeFloat(m.fps)
+            }
+        }
+        tmp.renameTo(snapshotFile)
+    }
+
     fun start() {
+        if (!queried.get()) scope.launch {
+            val snap = loadSnapshot() ?: return@launch
+            synchronized(publishLock) {
+                if (!queried.get()) { _library.value = snap; _loaded.value = true }
+            }
+        }
         if (observer == null) {
             val o = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) = refresh(350)
@@ -66,10 +117,15 @@ class MediaRepository(private val context: Context) {
         pending?.cancel()
         pending = scope.launch {
             if (delayMs > 0) delay(delayMs)
-            val lib = runCatching { query(trashed = false) }.getOrDefault(_library.value)
-            _library.value = lib
-            _loaded.value = true
+            val result = runCatching { query(trashed = false) }
+            val lib = result.getOrDefault(_library.value)
+            synchronized(publishLock) {
+                queried.set(true)
+                _library.value = lib
+                _loaded.value = true
+            }
             motion.scan(lib)
+            if (result.isSuccess) saveSnapshot(lib)
             _trashed.value = runCatching { query(trashed = true) }.getOrDefault(emptyList())
         }
     }

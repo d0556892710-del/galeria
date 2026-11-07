@@ -135,6 +135,14 @@ fun SettingsScreen(vm: AppViewModel, backdrop: Backdrop, onBack: () -> Unit) {
             }
             Footer(stringResource(R.string.tab_bar_scroll_footer))
 
+            Header(stringResource(R.string.fast_scroller))
+            Group {
+                CheckRow(stringResource(R.string.side_right), !s.scrollerOnLeft) { vm.setScrollerLeft(false) }
+                Divider()
+                CheckRow(stringResource(R.string.side_left), s.scrollerOnLeft) { vm.setScrollerLeft(true) }
+            }
+            Footer(stringResource(R.string.fast_scroller_footer))
+
             Header(stringResource(R.string.liquid_glass))
             Group {
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {

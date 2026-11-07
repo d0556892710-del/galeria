@@ -170,11 +170,11 @@ fun Viewer(
 
     val items = remember(vs.key, lib, hiddenList) {
         when (vs.ctx) {
-            ViewerCtx.External -> vs.list
-            ViewerCtx.Hidden -> vs.list.mapNotNull { h -> hiddenList.firstOrNull { it.hiddenFile == h.hiddenFile } }
+            ViewerCtx.External -> vs.list.distinctBy { it.id }
+            ViewerCtx.Hidden -> vs.list.mapNotNull { h -> hiddenList.firstOrNull { it.hiddenFile == h.hiddenFile } }.distinctBy { it.id }
             else -> {
                 val byId = lib.associateBy { it.id }
-                vs.list.mapNotNull { byId[it.id] }
+                vs.list.mapNotNull { byId[it.id] }.distinctBy { it.id }
             }
         }
     }
@@ -283,7 +283,7 @@ fun Viewer(
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (showPager) 1f else 0f }.backdropSource(backdrop)) {
             HorizontalPager(
                 state = pager,
-                key = { items.getOrNull(it)?.id ?: it.toLong() },
+                key = { items.getOrNull(it)?.id?.toString() ?: "page$it" },
                 beyondViewportPageCount = 1,
                 pageSpacing = 12.dp,
                 userScrollEnabled = cur?.let { !zoomOf(it).zoomed } ?: true,

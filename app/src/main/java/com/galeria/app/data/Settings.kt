@@ -31,6 +31,8 @@ data class AppSettings(
     val pinned: List<String> = DefaultPinned,
     /** The tab bar shrinks to Years · Months · All when scrolling down (true) or up (false). */
     val shrinkOnScrollDown: Boolean = true,
+    /** The ↑↓ fast scroller sits on the left edge instead of the right. */
+    val scrollerOnLeft: Boolean = false,
 )
 
 val DefaultPinned = listOf("fav", "saved", "videos", "shots")
@@ -52,6 +54,7 @@ class SettingsStore(private val context: Context) {
         val hiddenAlbums = stringSetPreferencesKey("hidden_albums")
         val pinned = stringPreferencesKey("pinned")
         val shrinkDown = booleanPreferencesKey("shrink_on_scroll_down")
+        val scrollerLeft = booleanPreferencesKey("scroller_on_left")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map { p -> p.toSettings() }
@@ -71,6 +74,7 @@ class SettingsStore(private val context: Context) {
         newestFirst = this[K.newestFirst] ?: true,
         hiddenAlbums = (this[K.hiddenAlbums] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
         shrinkOnScrollDown = this[K.shrinkDown] ?: true,
+        scrollerOnLeft = this[K.scrollerLeft] ?: false,
         pinned = (this[K.pinned]?.split(',')?.filter { it.isNotBlank() } ?: DefaultPinned).distinct(),
     )
 
@@ -89,6 +93,7 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setShrinkDown(v: Boolean) = context.store.edit { it[K.shrinkDown] = v }
+    suspend fun setScrollerLeft(v: Boolean) = context.store.edit { it[K.scrollerLeft] = v }
     suspend fun setNewestFirst(v: Boolean) = context.store.edit { it[K.newestFirst] = v }
     suspend fun setAlbumHidden(id: Long, hidden: Boolean) = context.store.edit { p ->
         val cur = (p[K.hiddenAlbums] ?: emptySet()).toMutableSet()

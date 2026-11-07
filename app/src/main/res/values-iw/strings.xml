@@ -284,4 +284,8 @@
     <string name="scroll_down">הצג בגלילה למטה</string>
     <string name="scroll_up">הצג בגלילה למעלה</string>
     <string name="tab_bar_scroll_footer">בחר באיזה כיוון גלילה סרגל הלשוניות יתכווץ ויציג שנים, חודשים והכול.</string>
+    <string name="fast_scroller">גלילה מהירה ↑↓</string>
+    <string name="side_right">צד ימין</string>
+    <string name="side_left">צד שמאל</string>
+    <string name="fast_scroller_footer">באיזה צד תופיע הידית לקפיצה מהירה בספרייה בזמן גלילה.</string>
 </resources>

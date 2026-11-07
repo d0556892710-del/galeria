@@ -13,6 +13,9 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -111,17 +114,19 @@ data class YearGroup(val year: Int, val items: List<Media>, val cover: Media)
 
 fun coverOf(list: List<Media>): Media = list.lastOrNull { it.isFavorite } ?: list[list.size / 2]
 
+
+/**
+ * One card per month. Grouped by month (not by runs), so a month can never appear twice even when
+ * photos are sorted by date added, or arrive slightly out of order — a repeated month would be a
+ * duplicate list key, which crashes Compose.
+ */
 fun monthGroups(items: List<Media>, fmt: Fmt): List<MonthGroup> {
-    val out = ArrayList<MonthGroup>()
-    var start = 0
-    for (i in 1..items.size) {
-        if (i == items.size || fmt.monthKey(items[i].dateTaken) != fmt.monthKey(items[start].dateTaken)) {
-            val l = items.subList(start, i)
-            out += MonthGroup(fmt.monthKey(l[0].dateTaken), l, coverOf(l))
-            start = i
-        }
-    }
-    return out
+    if (items.isEmpty()) return emptyList()
+    val newestFirst = items.first().dateTaken > items.last().dateTaken
+    val map = LinkedHashMap<Int, ArrayList<Media>>()
+    for (m in items) map.getOrPut(fmt.monthKey(m.dateTaken)) { ArrayList() }.add(m)
+    val keys = map.keys.sorted().let { if (newestFirst) it.asReversed() else it }
+    return keys.map { k -> val l = map.getValue(k); MonthGroup(k, l, coverOf(l)) }
 }
 
 fun yearGroups(items: List<Media>, fmt: Fmt, newestFirst: Boolean = false): List<YearGroup> =
@@ -240,6 +245,7 @@ fun FastScroller(
     backdrop: Backdrop?,
     topPadding: Dp,
     bottomPadding: Dp,
+    onLeft: Boolean = false,
 ) {
     val state = handle.state
     if (items.size < columns * 24) return
@@ -254,20 +260,44 @@ fun FastScroller(
         }
     }
     val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(if (visible) 150 else 350), label = "fs")
-    val scope = rememberCoroutineScope()
     var dragFraction by remember { mutableFloatStateOf(0f) }
     val thumbH = 58.dp
+    val totalRows = (items.size + columns - 1) / columns
+
+    /** Row height and how many rows fit, from the current layout. */
+    fun metrics(): Pair<Float, Float> {
+        val li = state.layoutInfo
+        val cell = li.visibleItemsInfo.firstOrNull { it.index >= handle.headerCount }
+        val rowH = (cell?.size?.height ?: 1).coerceAtLeast(1).toFloat()
+        val viewport = (li.viewportEndOffset - li.viewportStartOffset).toFloat()
+        return rowH to (viewport / rowH)
+    }
+
+    // Exact position including the part of a row that is scrolled off, so the thumb glides.
     // Read in the layout phase only, so scrolling never recomposes this.
     fun scrollFraction(): Float {
-        val totalRows = (items.size + columns - 1) / columns
-        val visibleRows = max(1, state.layoutInfo.visibleItemsInfo.size / columns)
-        return ((state.firstVisibleItemIndex / columns).toFloat() / max(1, totalRows - visibleRows)).coerceIn(0f, 1f)
+        val (rowH, visibleRows) = metrics()
+        val idx = state.firstVisibleItemIndex - handle.headerCount
+        val pos = if (idx < 0) 0f else idx / columns + state.firstVisibleItemScrollOffset / rowH
+        val range = (totalRows - visibleRows).coerceAtLeast(1f)
+        return (pos / range).coerceIn(0f, 1f)
     }
+
+    fun scrollTo(f: Float) {
+        val (rowH, visibleRows) = metrics()
+        val row = f * (totalRows - visibleRows).coerceAtLeast(0f)
+        val whole = row.toInt().coerceIn(0, (totalRows - 1).coerceAtLeast(0))
+        val index = (whole * columns + handle.headerCount).coerceIn(0, items.size - 1 + handle.headerCount)
+        // One request per frame at most; Compose applies it in the next layout pass.
+        state.requestScrollToItem(index, ((row - whole) * rowH).roundToInt())
+    }
+
+    val side = if (onLeft) androidx.compose.ui.AbsoluteAlignment.TopLeft else androidx.compose.ui.AbsoluteAlignment.TopRight
     BoxWithConstraints(Modifier.fillMaxSize().padding(top = topPadding, bottom = bottomPadding)) {
         val trackPx = with(density) { (maxHeight - thumbH).toPx() }.coerceAtLeast(1f)
         val bubbleText by remember(items, fmt) {
             derivedStateOf {
-                if (!dragging) null
+                if (!dragging || items.isEmpty()) null
                 else fmt.monthYearShort(items[((items.size - 1) * dragFraction).roundToInt().coerceIn(0, items.size - 1)].dateTaken)
             }
         }
@@ -276,9 +306,9 @@ fun FastScroller(
             GlassSurface(
                 backdrop,
                 Modifier
-                    .align(Alignment.TopEnd)
+                    .align(side)
                     .offset { IntOffset(0, (dragFraction * trackPx).roundToInt() + 9.dp.roundToPx()) }
-                    .padding(end = 58.dp)
+                    .then(if (onLeft) Modifier.absolutePadding(left = 58.dp) else Modifier.absolutePadding(right = 58.dp))
                     .heightIn(min = 40.dp),
                 RoundedCornerShape(20.dp),
             ) {
@@ -289,9 +319,9 @@ fun FastScroller(
         GlassSurface(
             backdrop,
             Modifier
-                .align(Alignment.TopEnd)
+                .align(side)
                 .offset { IntOffset(0, ((if (dragging) dragFraction else scrollFraction()) * trackPx).roundToInt()) }
-                .padding(end = 6.dp)
+                .then(if (onLeft) Modifier.absolutePadding(left = 6.dp) else Modifier.absolutePadding(right = 6.dp))
                 .size(40.dp, thumbH)
                 .graphicsLayer {
                     this.alpha = alpha
@@ -300,15 +330,25 @@ fun FastScroller(
                 }
                 .then(
                     if (shown) Modifier.pointerInput(items.size, columns) {
-                        detectVerticalDragGestures(
-                            onDragStart = { dragging = true; dragFraction = scrollFraction() },
-                            onDragEnd = { dragging = false },
-                            onDragCancel = { dragging = false },
-                        ) { change, dy ->
-                            change.consume()
-                            dragFraction = (dragFraction + dy / trackPx).coerceIn(0f, 1f)
-                            val idx = ((items.size - 1) * dragFraction).roundToInt()
-                            scope.launch { state.scrollToItem(idx) }
+                        awaitEachGesture {
+                            // Grab immediately (no slop), follow the finger 1:1.
+                            val down = awaitFirstDown()
+                            down.consume()
+                            dragging = true
+                            dragFraction = scrollFraction()
+                            var last = down.position.y
+                            do {
+                                val ev = awaitPointerEvent()
+                                val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                val dy = c.position.y - last
+                                last = c.position.y
+                                if (dy != 0f) {
+                                    dragFraction = (dragFraction + dy / trackPx).coerceIn(0f, 1f)
+                                    scrollTo(dragFraction)
+                                }
+                                c.consume()
+                            } while (c.pressed)
+                            dragging = false
                         }
                     } else Modifier
                 ),
