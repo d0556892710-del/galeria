@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -91,7 +92,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val repo = pa.repo
     private val store = pa.settings
 
-    val settings: StateFlow<AppSettings> = store.flow.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    /** The saved settings; null until read from disk, so nothing (hidden albums, order, theme) is decided from defaults. */
+    private val savedSettings: StateFlow<AppSettings?> = store.flow.map<AppSettings, AppSettings?> { it }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val readySettings = savedSettings.filterNotNull()
+    val settings: StateFlow<AppSettings> = readySettings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    val settingsReady: StateFlow<Boolean> = savedSettings.map { it != null }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val library: StateFlow<List<Media>> = repo.library
     val trashed: StateFlow<List<Media>> = repo.trashed
     val hidden: StateFlow<List<Media>> = repo.hidden.items
@@ -100,7 +105,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val effects: StateFlow<Map<Long, LiveEffect>> = repo.edits.effects
 
     /** The library without albums the user hid. */
-    val visible: StateFlow<List<Media>> = combine(repo.library, settings) { lib, s ->
+    val visible: StateFlow<List<Media>> = combine(repo.library, readySettings) { lib, s ->
         if (s.hiddenAlbums.isEmpty()) lib else lib.filter { it.bucketId !in s.hiddenAlbums }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -128,7 +133,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val filterState = kotlinx.coroutines.flow.MutableStateFlow(LibFilter.All)
 
     /** The library as shown in All: filtered and sorted. */
-    val libraryView: StateFlow<List<Media>> = combine(visible, settings, filterState) { lib, s, f ->
+    val libraryView: StateFlow<List<Media>> = combine(visible, readySettings, filterState) { lib, s, f ->
         val list = lib.filter { m ->
             when (f) {
                 LibFilter.All -> true
@@ -151,7 +156,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** Your own albums (newest first), then the device's folders, like iOS. */
-    val albums: StateFlow<List<Album>> = combine(allAlbums, settings, repo.albums.albums, visible) { a, s, mine, lib ->
+    val albums: StateFlow<List<Album>> = combine(allAlbums, readySettings, repo.albums.albums, visible) { a, s, mine, lib ->
         val byId = lib.associateBy { it.id }
         val own = mine.map { ua ->
             val items = ua.items.mapNotNull { byId[it] }
@@ -179,7 +184,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromAlbum(albumId: Long, ids: Collection<Long>) = repo.albums.remove(albumId, ids)
     fun renameAlbum(albumId: Long, name: String) = repo.albums.rename(albumId, name)
     fun deleteAlbum(albumId: Long) = repo.albums.delete(albumId)
-    val hiddenAlbums: StateFlow<List<Album>> = combine(allAlbums, settings) { a, s -> a.filter { it.id in s.hiddenAlbums } }
+    val hiddenAlbums: StateFlow<List<Album>> = combine(allAlbums, readySettings) { a, s -> a.filter { it.id in s.hiddenAlbums } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun setLibFilter(f: LibFilter) {

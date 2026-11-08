@@ -114,6 +114,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun PhotosRoot(vm: AppViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val settingsReady by vm.settingsReady.collectAsStateWithLifecycle()
+    // Wait the few milliseconds it takes to read the settings, so the first frame is already in the
+    // chosen theme and order (no flash of the wrong theme or of hidden albums).
+    if (!settingsReady) { Box(Modifier.fillMaxSize().background(if (isDark(settings.theme)) Color.Black else Color.White)); return }
     val dark = isDark(settings.theme)
     val bridge = LocalBridge.current
     val viewerOpen = vm.viewer != null
@@ -311,8 +315,8 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     }
 
     // One-time offer to skip the system pop-up for every delete / favourite.
-    LaunchedEffect(loaded) {
-        if (loaded && !settings.askedManageMedia && !bridge.canManageMedia() && picker == null) {
+    LaunchedEffect(loaded, settingsReady) {
+        if (loaded && settingsReady && !settings.askedManageMedia && !bridge.canManageMedia() && picker == null) {
             delay(900)
             vm.markAskedManage()
             overlays.sheet(SheetSpec(
