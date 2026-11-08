@@ -29,21 +29,16 @@ sleep 20
 if adb shell pidof $PKG >/dev/null; then log "Opened and still running after 20 s: yes"; else log "Opened and still running after 20 s: NO"; fi
 
 # Screens tour in English, then the whole phone in Hebrew (right-to-left) and the tour again.
-python3 .github/qa_tour.py en > tour_en.txt 2>&1 || true
-adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
-adb shell setprop persist.sys.locale he-IL
-adb shell stop; sleep 2; adb shell start
-adb wait-for-device
-for i in $(seq 1 90); do [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ] && break; sleep 2; done
-sleep 15
-adb shell input keyevent 82 >/dev/null 2>&1 || true
-python3 .github/qa_tour.py he > tour_he.txt 2>&1 || true
-grep -h "not found" tour_en.txt tour_he.txt | sed 's/^/tour: /' | tee -a "$OUT" || true
+timeout 600 python3 .github/qa_tour.py en > tour_en.txt 2>&1 || true
+# Switch the app to Hebrew through its own Language setting (no system restart needed).
+timeout 300 python3 .github/qa_tour.py switch-he > tour_switch.txt 2>&1 || true
+timeout 600 python3 .github/qa_tour.py he > tour_he.txt 2>&1 || true
+grep -h "not found" tour_en.txt tour_switch.txt tour_he.txt | sed 's/^/tour: /' | tee -a "$OUT" || true
 adb logcat -c
 
 log ""
 log "## Tapping around in Hebrew (monkey)"
-adb shell monkey -p $PKG --throttle 300 --pct-syskeys 0 --pct-appswitch 0 --pct-anyevent 0 -s 42 -v 600 > monkey.txt 2>&1 || true
+timeout 900 adb shell monkey -p $PKG --throttle 300 --pct-syskeys 0 --pct-appswitch 0 --pct-anyevent 0 -s 42 -v 600 > monkey.txt 2>&1 || true
 tail -3 monkey.txt | tee -a "$OUT"
 sleep 5
 

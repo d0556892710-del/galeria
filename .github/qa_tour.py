@@ -2,7 +2,8 @@
 """Walks through the main screens on the virtual phone and saves a screenshot of each (for review)."""
 import os, re, subprocess, sys, time, xml.etree.ElementTree as ET
 
-LANG = sys.argv[1] if len(sys.argv) > 1 else "en"
+MODE = sys.argv[1] if len(sys.argv) > 1 else "en"
+LANG = "en" if MODE == "switch-he" else MODE
 OUT = "shots"
 PKG = "com.galeria.app"
 os.makedirs(OUT, exist_ok=True)
@@ -21,7 +22,11 @@ HE = strings("app/src/main/res/values-iw/strings.xml")
 S = HE if LANG == "he" else EN
 
 def adb(*a, capture=False):
-    r = subprocess.run(["adb", *a], capture_output=True)
+    try:
+        r = subprocess.run(["adb", *a], capture_output=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        print("adb timed out:", a, flush=True)
+        return b"" if capture else None
     return r.stdout if capture else None
 
 n = [0]
@@ -51,7 +56,7 @@ def tap_xy(x, y):
     adb("shell", "input", "tap", str(x), str(y)); time.sleep(1.0)
 
 def tap(*keys, literal=None):
-    want = [S.get(k, "") for k in keys if S.get(k)] + ([literal] if literal else [])
+    want = [S.get(k, "") for k in keys if k and S.get(k)] + ([literal] if literal else [])
     for t, d, b in nodes():
         for w in want:
             if w and (t.strip() == w or d.strip() == w):
@@ -79,6 +84,17 @@ def launch():
 def on_screen(*keys):
     want = {S.get(k, "") for k in keys} - {""}
     return any(t.strip() in want or d.strip() in want for t, d, b in nodes())
+
+if MODE == "switch-he":
+    launch(); tap("tab_collections"); time.sleep(1.5)
+    if tap("settings"):
+        time.sleep(1.5)
+        for _ in range(6):
+            if tap(None, literal="עברית"): break
+            swipe_up()
+        time.sleep(4)
+    print("switched", flush=True)
+    sys.exit(0)
 
 launch()
 # A system/app prompt on first run: accept it.
