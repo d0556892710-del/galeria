@@ -589,6 +589,9 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
             }
         }
 
+        // ------------------------------ memory movie ------------------------------
+        vm.playing?.let { mem -> key(mem.id) { com.galeria.app.ui.memories.MemoryPlayer(mem) { vm.playing = null } } }
+
         // ------------------------------ editor ------------------------------
         vm.editing?.let { m ->
             key(m.id) {

@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -39,6 +40,10 @@ data class Album(val id: Long, val name: String, val count: Int, val cover: Medi
 sealed class Page(val locked: Boolean = false) {
     data class Bucket(val id: Long, val name: String, val fromHidden: Boolean = false) : Page()
     data class UserAlbum(val id: Long, val name: String) : Page()
+    data class Person(val id: Long, val name: String) : Page()
+    data class Memory(val id: String, val title: String) : Page()
+    data object MemoriesList : Page()
+    data object PeopleList : Page()
     data object Favourites : Page()
     data object Videos : Page()
     data object Screenshots : Page()
@@ -68,7 +73,7 @@ sealed class Page(val locked: Boolean = false) {
     data object RecentlyEdited : Page()
 
     /** Pages that show a list of collections rather than a photo grid. */
-    val isList: Boolean get() = this == AllAlbums || this == MediaTypesList || this == UtilitiesList || this == PinnedList
+    val isList: Boolean get() = this == AllAlbums || this == MediaTypesList || this == UtilitiesList || this == PinnedList || this == MemoriesList || this == PeopleList
 }
 
 enum class ViewerCtx { Library, Page, Search, External, Hidden }
@@ -158,6 +163,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         own + a.filter { it.id !in s.hiddenAlbums }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val people: StateFlow<List<com.galeria.app.data.PersonInfo>> = repo.faces.people
+
+    /** Memories and Featured Photos, rebuilt as the phone understands more photos. */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    val memories: StateFlow<List<com.galeria.app.data.Memory>> = combine(visible, repo.smart.index, repo.faces.people) { lib, smart, ppl -> Triple(lib, smart, ppl) }
+        .debounce(1200)
+        .map { (lib, smart, ppl) -> runCatching { com.galeria.app.data.Memories.build(lib, smart, ppl, getApplication<Application>().resources, java.util.Locale.getDefault()) }.getOrDefault(emptyList()) }
+        .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** The Memory playing as a movie. */
+    var playing by mutableStateOf<com.galeria.app.data.Memory?>(null)
+
     /** A photo to scroll to in Library (Show in All Photos). */
     var reveal by mutableStateOf<Long?>(null)
 
@@ -232,13 +249,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         tags: MediaTags = MediaTags(), effects: Map<Long, LiveEffect> = emptyMap(),
     ): List<Media> {
         val raw = rawItems(p, lib, s, trashed, hidden, tags, effects)
-        val chronological = p != Page.RecentlyViewed && p != Page.Deleted && p != Page.Hidden
+        val chronological = p != Page.RecentlyViewed && p != Page.Deleted && p != Page.Hidden && p !is Page.Memory
         // Unique ids always: a repeated id is a duplicate list key, which crashes the grid.
         return (if (chronological && s.newestFirst) raw.asReversed() else raw).distinctBy { it.id }
     }
 
     private fun rawItems(p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>, tags: MediaTags, effects: Map<Long, LiveEffect>): List<Media> = when (p) {
         is Page.Bucket -> lib.filter { it.bucketId == p.id }
+        is Page.Person -> {
+            val ids = repo.faces.people.value.firstOrNull { it.id == p.id }?.mediaIds ?: emptySet()
+            lib.filter { it.id in ids }
+        }
+        is Page.Memory -> memories.value.firstOrNull { it.id == p.id }?.items.orEmpty()
+        Page.MemoriesList, Page.PeopleList -> emptyList()
         is Page.UserAlbum -> {
             val ids = repo.albums.albums.value.firstOrNull { it.id == p.id }?.items?.toHashSet() ?: emptySet()
             lib.filter { it.id in ids }

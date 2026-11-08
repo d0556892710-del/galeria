@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -155,6 +156,8 @@ fun SectionListPage(vm: AppViewModel, page: Page, backdrop: Backdrop, onBack: ()
             Page.AllAlbums -> R.string.albums
             Page.MediaTypesList -> R.string.media_types
             Page.UtilitiesList -> R.string.utilities
+            Page.MemoriesList -> R.string.memories
+            Page.PeopleList -> R.string.people
             else -> R.string.pinned
         }
     )
@@ -171,6 +174,29 @@ fun SectionListPage(vm: AppViewModel, page: Page, backdrop: Backdrop, onBack: ()
                     item(span = { GridItemSpan(maxLineSpan) }) { LargeTitle(title) }
                     items(albums, key = { it.key }) { a ->
                         AlbumCard(a, onOpen = { vm.push(a.page) }, onMenu = { r -> overlays.menu(r, albumMenu(vm, ctx, overlays, a, settings)) })
+                    }
+                }
+                Page.MemoriesList -> {
+                    val memories by vm.memories.collectAsState()
+                    LazyColumn(contentPadding = PaddingValues(top = top + 58.dp, bottom = bottom + 30.dp), verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
+                        item { LargeTitle(title, Modifier.padding(horizontal = 20.dp)) }
+                        items(memories, key = { it.id }) { mem ->
+                            Box(Modifier.padding(horizontal = 16.dp)) { MemoryCard(mem, wide = true) { vm.push(Page.Memory(mem.id, mem.title)) } }
+                        }
+                    }
+                }
+                Page.PeopleList -> {
+                    val people by vm.people.collectAsState()
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top + 58.dp, bottom = bottom + 30.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        item(span = { GridItemSpan(maxLineSpan) }) { LargeTitle(title) }
+                        items(people, key = { it.id }) { pp ->
+                            Box(contentAlignment = Alignment.Center) { PersonBubble(pp, 96.dp) { vm.push(Page.Person(pp.id, pp.name)) } }
+                        }
                     }
                 }
                 Page.PinnedList -> {
@@ -301,5 +327,51 @@ fun AlbumCard(a: Album, onOpen: () -> Unit, onMenu: (Rect) -> Unit) {
         Spacer(Modifier.height(7.dp))
         Text(a.name, style = Type.subheadSemibold, color = p.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(a.count.toString(), style = Type.subhead, color = p.secondaryLabel)
+    }
+}
+
+
+/** A Memory card: cover, title and dates over a soft shade (iPhone style). */
+@Composable
+fun MemoryCard(mem: com.galeria.app.data.Memory, wide: Boolean = false, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    val fmt = com.galeria.app.ui.components.rememberFmt()
+    Box(
+        Modifier
+            .then(if (wide) Modifier.fillMaxWidth().aspectRatio(1.45f) else Modifier.size(232.dp, 160.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(p.fill)
+            .pressable(onClick = onClick)
+    ) {
+        mem.cover?.let { ThumbImage(it, 768, Modifier.fillMaxSize()) }
+        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(0f to Color.Transparent, .55f to Color.Transparent, 1f to Color.Black.copy(alpha = .55f))))
+        Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
+            Text(mem.title, style = Type.headline, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val first = mem.items.minByOrNull { it.dateTaken }; val last = mem.items.maxByOrNull { it.dateTaken }
+            if (mem.subtitle.isNotBlank()) Text(mem.subtitle, style = Type.footnote, color = Color.White.copy(alpha = .85f))
+            else if (first != null && last != null) Text(
+                if (fmt.yearOf(first.dateTaken) == fmt.yearOf(last.dateTaken)) fmt.monthYearShort(last.dateTaken) else "${fmt.yearOf(first.dateTaken)}–${fmt.yearOf(last.dateTaken)}",
+                style = Type.footnote, color = Color.White.copy(alpha = .85f),
+            )
+        }
+    }
+}
+
+/** A person: round face and name. */
+@Composable
+fun PersonBubble(pp: com.galeria.app.data.PersonInfo, size: androidx.compose.ui.unit.Dp = 84.dp, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Column(Modifier.width(size + 6.dp).pressable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(size).clip(CircleShape).background(p.fill)) {
+            val bmp by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, pp.avatar) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { android.graphics.BitmapFactory.decodeFile(pp.avatar)?.asImageBitmap() }.getOrNull()
+                }
+            }
+            bmp?.let { androidx.compose.foundation.Image(it, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
+                ?: Icon(Sym.person, null, Modifier.align(Alignment.Center).size(size / 2), tint = p.tertiaryLabel)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(pp.name.ifBlank { " " }, style = Type.footnote, color = p.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

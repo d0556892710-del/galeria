@@ -35,7 +35,7 @@ data class SmartEntry(val modified: Long, val labels: List<String>, val text: St
  * Understands photos on the device (nothing is uploaded), slowly in the background, newest
  * first, and remembers it: powers search by content ("dog", "beach", "כלב") and by text in photos.
  */
-class SmartIndex(private val context: Context) {
+class SmartIndex(private val context: Context, val faces: FaceStore) {
     private val dispatcher = Executors.newSingleThreadExecutor { r ->
         Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND); r.run() }, "photos-understand")
     }.asCoroutineDispatcher()
@@ -53,6 +53,7 @@ class SmartIndex(private val context: Context) {
         job?.cancel()
         job = scope.launch {
             if (!loaded) { load(); loaded = true }
+            faces.ensureLoaded()
             delay(4000) // let the library settle and the first screens load first
             val map = HashMap(_index.value)
             var since = 0
@@ -60,20 +61,26 @@ class SmartIndex(private val context: Context) {
                 if (!isActive) break
                 if (m.isVideo || m.hiddenFile != null) continue
                 val e = map[m.id]
-                if (e != null && e.modified == m.dateModified) continue
+                val needSmart = e == null || e.modified != m.dateModified
+                val needFaces = !m.isScreenshot && faces.needs(m)
+                if (!needSmart && !needFaces) continue
                 val bmp = runCatching { decode(m) }.getOrNull() ?: continue
-                val img = InputImage.fromBitmap(bmp, 0)
-                val labels = runCatching { Tasks.await(labeler.process(img)).map { it.text } }.getOrDefault(emptyList())
-                val texty = m.isScreenshot || labels.any { it in TEXTY }
-                val text = if (texty) runCatching { Tasks.await(reader.process(img)).text }.getOrDefault("") else ""
-                map[m.id] = SmartEntry(m.dateModified, labels, text.replace(Regex("\\s+"), " ").take(600))
+                if (needSmart) {
+                    val img = InputImage.fromBitmap(bmp, 0)
+                    val labels = runCatching { Tasks.await(labeler.process(img)).map { it.text } }.getOrDefault(emptyList())
+                    val texty = m.isScreenshot || labels.any { it in TEXTY }
+                    val text = if (texty) runCatching { Tasks.await(reader.process(img)).text }.getOrDefault("") else ""
+                    map[m.id] = SmartEntry(m.dateModified, labels, text.replace(Regex("\\s+"), " ").take(600))
+                }
+                if (needFaces) runCatching { faces.process(m, bmp) }
                 bmp.recycle()
-                if (++since >= 40) { since = 0; _index.value = HashMap(map); save(map) }
+                if (++since >= 40) { since = 0; _index.value = HashMap(map); save(map); faces.save(); faces.publish() }
             }
             val existing = lib.mapTo(HashSet()) { it.id }
             map.keys.retainAll(existing)
             _index.value = map
             save(map)
+            faces.finishScan(existing)
         }
     }
 

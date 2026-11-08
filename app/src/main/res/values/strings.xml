@@ -319,4 +319,24 @@
     <string name="clean_up_hint">Brush over what you want to remove.</string>
     <string name="live_text">Live Text</string>
     <string name="copy_all">Copy All</string>
+    <string name="close">Close</string>
+    <string name="memories">Memories</string>
+    <string name="people">People</string>
+    <string name="person">Person</string>
+    <string name="featured_photos">Featured Photos</string>
+    <string name="on_this_day">On This Day</string>
+    <string name="mem_with">With %1$s</string>
+    <string name="mem_pets">Furry Friends</string>
+    <string name="mem_food">Good Eats</string>
+    <string name="mem_beach">Beach Days</string>
+    <string name="mem_nature">Into the Wild</string>
+    <string name="mem_nights">Nights Out</string>
+    <string name="mem_year">Best of %1$d</string>
+    <string name="play_memory">Play Memory</string>
+    <string name="add_name">Add Name</string>
+    <string name="name_person">Name This Person</string>
+    <string name="name_hint">Name</string>
+    <string name="merge_with">Merge With…</string>
+    <string name="not_this_person">Not This Person</string>
+    <string name="hide_person">Hide Person</string>
 </resources>

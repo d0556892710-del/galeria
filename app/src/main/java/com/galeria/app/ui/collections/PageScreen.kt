@@ -131,6 +131,10 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
                     header = {
                         Column {
                             PageHeader(title, page, items)
+                            if (page is Page.Memory && items.isNotEmpty()) MemoryPlayRow {
+                                vm.memories.value.firstOrNull { it.id == page.id }?.let { vm.playing = it }
+                            }
+                            if (page is Page.Person) PersonRow(vm, page, overlays, ctx)
                             if (page == Page.Duplicates) {
                                 val extras = remember(items) { vm.duplicateExtras(items) }
                                 if (extras.isNotEmpty()) MergeRow(extras.size) {
@@ -187,7 +191,12 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
                         onShare = { bridge.share(chosen) },
                         onDelete = { actions.confirmDelete(chosen) { selecting = false; selected = emptySet() } },
                         onMore = { r ->
-                            overlays.menu(r, more.selectionMenu(chosen, (page as? Page.UserAlbum)?.id) { selecting = false; selected = emptySet() })
+                            val spec = more.selectionMenu(chosen, (page as? Page.UserAlbum)?.id) { selecting = false; selected = emptySet() }
+                            overlays.menu(r, if (page is Page.Person) spec.copy(groups = spec.groups + listOf(listOf(
+                                com.galeria.app.ui.components.MenuItem(ctx.getString(R.string.not_this_person), Sym.xmark, destructive = true) {
+                                    vm.repo.faces.detach(page.id, chosen.mapTo(HashSet()) { it.id }); selecting = false; selected = emptySet()
+                                }
+                            ))) else spec)
                         },
                     )
                 }
@@ -252,6 +261,10 @@ fun daysLeft(m: Media): Int {
 fun pageTitle(page: Page): String = when (page) {
     is Page.Bucket -> page.name
     is Page.UserAlbum -> page.name
+    is Page.Person -> page.name.ifBlank { stringResource(R.string.person) }
+    is Page.Memory -> page.title
+    Page.MemoriesList -> stringResource(R.string.memories)
+    Page.PeopleList -> stringResource(R.string.people)
     Page.Favourites -> stringResource(R.string.favourites)
     Page.Videos -> stringResource(R.string.videos)
     Page.Screenshots -> stringResource(R.string.screenshots)
@@ -326,5 +339,54 @@ private fun MergeRow(count: Int, onMerge: () -> Unit) {
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
         ) { Text(plural(R.plurals.merge_count, count), style = Type.subheadSemibold, color = androidx.compose.ui.graphics.Color.White) }
+    }
+}
+
+
+/** Memory page: play it as a movie. */
+@Composable
+private fun MemoryPlayRow(onPlay: () -> Unit) {
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 14.dp)) {
+        Row(
+            Modifier.height(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(p.blue).pressable(onClick = onPlay).padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Sym.play, null, Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.White)
+            androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.play_memory), style = Type.subheadSemibold, color = androidx.compose.ui.graphics.Color.White)
+        }
+    }
+}
+
+/** Person page: name, merge, hide. */
+@Composable
+private fun PersonRow(vm: AppViewModel, page: Page.Person, overlays: com.galeria.app.ui.components.Overlays, ctx: android.content.Context) {
+    val p = LocalPalette.current
+    val people by vm.people.collectAsState()
+    val me = people.firstOrNull { it.id == page.id }
+    @Composable
+    fun chip(text: String, onClick: () -> Unit) = Box(
+        Modifier.height(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(p.fill).pressable(onClick = onClick).padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(text, style = Type.subheadSemibold, color = p.blue) }
+    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 14.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+        chip(stringResource(if (me?.name.isNullOrBlank()) R.string.add_name else R.string.rename)) {
+            overlays.prompt(com.galeria.app.ui.components.PromptSpec(
+                title = ctx.getString(R.string.name_person), initial = me?.name.orEmpty(), placeholder = ctx.getString(R.string.name_hint), confirm = ctx.getString(R.string.save),
+            ) { name ->
+                vm.repo.faces.rename(page.id, name)
+                vm.pages = vm.pages.map { if (it == page) Page.Person(page.id, name) else it }
+            })
+        }
+        chip(stringResource(R.string.merge_with)) {
+            val others = people.filter { it.id != page.id }
+            overlays.sheet(com.galeria.app.ui.components.SheetSpec(ctx.getString(R.string.merge_with), others.take(12).map { o ->
+                com.galeria.app.ui.components.SheetAction(o.name.ifBlank { ctx.getString(R.string.person) + " · " + o.mediaIds.size }) {
+                    vm.repo.faces.merge(page.id, o.id)
+                }
+            }))
+        }
+        chip(stringResource(R.string.hide_person)) { vm.repo.faces.hide(page.id); vm.pop() }
     }
 }

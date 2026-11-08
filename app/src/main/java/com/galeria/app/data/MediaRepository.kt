@@ -46,7 +46,8 @@ class MediaRepository(private val context: Context) {
     val motion = MotionStore(context)
     val edits = EditStore(context)
     val albums = AlbumStore(context)
-    val smart = SmartIndex(context)
+    val faces = FaceStore(context)
+    val smart = SmartIndex(context, faces)
 
     private var observer: ContentObserver? = null
     private var pending: Job? = null
