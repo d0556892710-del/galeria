@@ -15,7 +15,8 @@ android {
         versionCode = 10
         versionName = "3.7"
         // Every phone in use today is 64-bit ARM; leaving out the other chips keeps the app small.
-        ndk { abiFilters += "arm64-v8a" }
+        // (-Pabi=x86_64 builds a copy for the virtual phone used by the automatic test.)
+        ndk { abiFilters += ((project.findProperty("abi") as String?) ?: "arm64-v8a") }
     }
 
     signingConfigs {
