@@ -133,8 +133,19 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash .github/smoke.sh
+      - name: Upload screenshots for review
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls shots 2>/dev/null | wc -l
+          if ls shots/*.png >/dev/null 2>&1; then
+            gh release delete qa-shots --yes --cleanup-tag || true
+            gh release create qa-shots shots/*.png --draft --title "QA screenshots" --notes "Screens from the automatic test, built from ${GITHUB_SHA::7}"
+          fi
       - name: Results
         if: always()
         run: |
