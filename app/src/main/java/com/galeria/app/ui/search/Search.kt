@@ -51,7 +51,7 @@ import com.galeria.app.ui.theme.Type
 import java.util.Locale
 
 /** Words each item answers to: month names (English + Hebrew), year, album, kind, file name. */
-private fun words(m: Media, fmt: Fmt): List<String> {
+private fun words(m: Media, fmt: Fmt, e: com.galeria.app.data.SmartEntry?): List<String> {
     val key = fmt.monthKey(m.dateTaken)
     val month = key % 12 + 1
     val en = java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH).lowercase()
@@ -67,14 +67,23 @@ private fun words(m: Media, fmt: Fmt): List<String> {
         if (m.isScreenshot) addAll(listOf("screenshot", "screenshots", "צילום", "מסך", "צילומי"))
         if (m.isFavorite) addAll(listOf("favourite", "favourites", "favorite", "favorites", "מועדף", "מועדפים"))
         if (m.isPanorama) addAll(listOf("panorama", "פנורמה"))
+        // What the phone understood in the photo: things (English + Hebrew) and text.
+        if (e != null) {
+            for (l in e.labels) {
+                val low = l.lowercase()
+                add(low); addAll(low.split(' '))
+                com.galeria.app.data.SmartIndex.HE[l]?.let { h -> add(h); addAll(h.split(' ')) }
+            }
+            if (e.text.isNotEmpty()) e.text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 2 }.take(120).forEach { add(it) }
+        }
     }
 }
 
-fun searchLibrary(lib: List<Media>, query: String, fmt: Fmt): List<Media> {
+fun searchLibrary(lib: List<Media>, query: String, fmt: Fmt, smart: Map<Long, com.galeria.app.data.SmartEntry> = emptyMap()): List<Media> {
     val toks = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (toks.isEmpty()) return emptyList()
     return lib.filter { m ->
-        val w = words(m, fmt)
+        val w = words(m, fmt, smart[m.id])
         toks.all { t -> w.any { it.startsWith(t) } }
     }
 }
@@ -92,10 +101,19 @@ fun SearchScreen(
     onQuery: (String) -> Unit,
     onClearRecent: () -> Unit,
     onOpen: (List<Media>, Media, Rect?) -> Unit,
+    smart: Map<Long, com.galeria.app.data.SmartEntry> = emptyMap(),
 ) {
     val p = LocalPalette.current
     val fmt = rememberFmt()
-    val results = remember(library, query, fmt) { searchLibrary(library, query, fmt) }
+    val results = remember(library, query, fmt, smart) { searchLibrary(library, query, fmt, smart) }
+    val hebrew = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language.let { it == "iw" || it == "he" }
+    // The most common things found in your photos become suggestions, like iPhone.
+    val things = remember(smart, hebrew) {
+        smart.values.flatMap { it.labels }.groupingBy { it }.eachCount().entries
+            .filter { it.value >= 3 && it.key !in setOf("Screenshot", "Text", "Font", "Paper") }
+            .sortedByDescending { it.value }.take(10)
+            .map { e -> (if (hebrew) com.galeria.app.data.SmartIndex.HE[e.key] ?: e.key else e.key) }
+    }
     if (query.isNotBlank()) {
         if (results.isEmpty()) {
             EmptyState(stringResource(R.string.no_results), stringResource(R.string.no_results_sub))
@@ -169,6 +187,7 @@ fun SearchScreen(
         val chips = buildList {
             months.forEach { k -> add("${fmt.month(k % 12 + 1)} ${k / 12}" to "${fmt.month(k % 12 + 1)} ${k / 12}") }
             years.forEach { add(it.toString() to it.toString()) }
+            things.forEach { add(it to it) }
             albums.take(4).forEach { add(it.name to it.name) }
             if (library.any { it.isVideo }) add(stringResource(R.string.videos) to stringResource(R.string.videos))
             if (library.any { it.isFavorite }) add(stringResource(R.string.favourites) to stringResource(R.string.favourites))

@@ -81,6 +81,8 @@ data class EditParams(
     val trimEndUs: Long = -1L,
     /** Markup drawn on the photo, in the edited picture's own 0…1 coordinates. */
     val strokes: List<Stroke> = emptyList(),
+    /** Clean Up: filled patches laid over the original, in its own 0…1 coordinates. */
+    val cleanups: List<CleanPatch> = emptyList(),
 ) {
     val auto: Float get() = values[Tool.Auto.ordinal]
 
@@ -102,7 +104,7 @@ data class EditParams(
         get() = rot != 0 || flip || kotlin.math.abs(straighten) > .05f || kotlin.math.abs(vertical) > .004f || kotlin.math.abs(horizontal) > .004f ||
             crop.left > .001f || crop.top > .001f || crop.right < .999f || crop.bottom < .999f
     val liveChanged: Boolean get() = keyUs >= 0 || liveOff || trimStartUs > 0 || trimEndUs >= 0
-    val isIdentity: Boolean get() = !adjusted && filter == Filter.Original && !geometryChanged && !liveChanged && strokes.isEmpty()
+    val isIdentity: Boolean get() = !adjusted && filter == Filter.Original && !geometryChanged && !liveChanged && strokes.isEmpty() && cleanups.isEmpty()
 
     fun resetGeometry() = copy(rot = 0, flip = false, straighten = 0f, vertical = 0f, horizontal = 0f, crop = Rect(0f, 0f, 1f, 1f), aspect = Aspect.Freeform)
 
@@ -114,6 +116,9 @@ data class EditParams(
         put("crop", JSONArray(listOf(crop.left, crop.top, crop.right, crop.bottom).map { it.toDouble() }))
         put("aspect", aspect.name); put("pa", portraitAspect)
         put("key", keyUs); put("loff", liveOff); put("mute", muted); put("ts", trimStartUs); put("te", trimEndUs)
+        put("clean", JSONArray(cleanups.map { c ->
+            JSONObject().put("f", c.file).put("l", c.left.toDouble()).put("t", c.top.toDouble()).put("r", c.right.toDouble()).put("b", c.bottom.toDouble())
+        }))
         put("strokes", JSONArray(strokes.map { st ->
             JSONObject().put("t", st.tool).put("c", st.color).put("w", st.width.toDouble()).put("p", JSONArray(st.points.map { it.toDouble() }))
         }))
@@ -136,6 +141,14 @@ data class EditParams(
                 portraitAspect = o.optBoolean("pa"),
                 keyUs = o.optLong("key", -1L), liveOff = o.optBoolean("loff"), muted = o.optBoolean("mute"),
                 trimStartUs = o.optLong("ts", 0L), trimEndUs = o.optLong("te", -1L),
+                cleanups = o.optJSONArray("clean")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        runCatching {
+                            val c = arr.getJSONObject(i)
+                            CleanPatch(c.getString("f"), c.getDouble("l").toFloat(), c.getDouble("t").toFloat(), c.getDouble("r").toFloat(), c.getDouble("b").toFloat())
+                        }.getOrNull()
+                    }
+                } ?: emptyList(),
                 strokes = o.optJSONArray("strokes")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i ->
                         runCatching {
@@ -159,3 +172,8 @@ data class Stroke(val tool: Int, val color: Int, val width: Float, val points: L
         const val PENCIL = 2
     }
 }
+
+
+/** A Clean Up result: a picture file covering part of the original (0…1 of its width / height). */
+@Immutable
+data class CleanPatch(val file: String, val left: Float, val top: Float, val right: Float, val bottom: Float)

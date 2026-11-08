@@ -12,8 +12,8 @@ android {
         applicationId = "com.galeria.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 8
-        versionName = "3.5"
+        versionCode = 9
+        versionName = "3.6"
     }
 
     signingConfigs {
@@ -81,6 +81,10 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.media3.effect)
+    // On-device vision (bundled models, works offline): content search, Live Text, faces.
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation(libs.androidx.exifinterface)
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

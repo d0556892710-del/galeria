@@ -65,13 +65,13 @@ class EditStore(private val context: Context) {
     fun sourceFile(m: Media): File? = backup(m).takeIf { it.exists() && it.length() > 0 }
 
     /** Decode for the editor preview (software, long side ≤ [maxSide]). */
-    suspend fun decodePreview(m: Media, maxSide: Int): Bitmap? = withContext(Dispatchers.IO) {
+    suspend fun decodePreview(m: Media, maxSide: Int, mutable: Boolean = false): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
             val f = sourceFile(m)
             val src = if (f != null) ImageDecoder.createSource(f) else ImageDecoder.createSource(context.contentResolver, m.uri)
             ImageDecoder.decodeBitmap(src) { d, info, _ ->
                 d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                d.isMutableRequired = false
+                d.isMutableRequired = mutable
                 val w = info.size.width; val h = info.size.height
                 val s = maxSide.toFloat() / max(w, h)
                 if (s < 1f) d.setTargetSize(max(1, (w * s).toInt()), max(1, (h * s).toInt()))
@@ -80,7 +80,7 @@ class EditStore(private val context: Context) {
     }
 
     /** Decode at full size (capped) for saving. */
-    suspend fun decodeFull(m: Media, maxSide: Int = 6144): Bitmap? = decodePreview(m, maxSide)
+    suspend fun decodeFull(m: Media, maxSide: Int = 6144, mutable: Boolean = false): Bitmap? = decodePreview(m, maxSide, mutable)
 
     /** A frame of a Live Photo's video (for a new key photo). */
     fun frameAt(video: File, us: Long, maxSide: Int): Bitmap? = runCatching {

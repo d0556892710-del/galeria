@@ -315,4 +315,8 @@
     <string name="markup">Markup</string>
     <string name="undo">Undo</string>
     <string name="redo">Redo</string>
+    <string name="clean_up">Clean Up</string>
+    <string name="clean_up_hint">Brush over what you want to remove.</string>
+    <string name="live_text">Live Text</string>
+    <string name="copy_all">Copy All</string>
 </resources>

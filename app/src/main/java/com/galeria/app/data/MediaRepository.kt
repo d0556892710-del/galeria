@@ -46,6 +46,7 @@ class MediaRepository(private val context: Context) {
     val motion = MotionStore(context)
     val edits = EditStore(context)
     val albums = AlbumStore(context)
+    val smart = SmartIndex(context)
 
     private var observer: ContentObserver? = null
     private var pending: Job? = null
@@ -126,6 +127,7 @@ class MediaRepository(private val context: Context) {
                 _loaded.value = true
             }
             motion.scan(lib)
+            if (result.isSuccess && lib.isNotEmpty()) smart.scan(lib)
             if (result.isSuccess) {
                 saveSnapshot(lib)
                 // Photos deleted elsewhere leave your albums (never on an empty/failed read).

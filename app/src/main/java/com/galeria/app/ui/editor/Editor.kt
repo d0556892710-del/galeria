@@ -143,6 +143,10 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
     var comparing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val lastValues = remember { HashMap<Tool, Float>() }
+    // Clean Up
+    var cleaning by remember { mutableStateOf(false) }
+    var cleanBusy by remember { mutableStateOf(false) }
+    val cleanRedo = remember { androidx.compose.runtime.mutableStateListOf<CleanPatch>() }
     // Markup
     var markup by remember { mutableStateOf(false) }
     var markTool by remember { mutableStateOf(MarkTool.PEN) }
@@ -197,7 +201,16 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
 
     val keyNow = if (params.keyUs >= 0) params.keyUs else origKeyUs
     val atKey = abs(scrubUs - keyNow) < 34_000L
-    val editBase: Bitmap? = if (params.keyUs >= 0) keyFrame ?: original else original
+    val editBase0: Bitmap? = if (params.keyUs >= 0) keyFrame ?: original else original
+    // Clean Up patches laid over the original (computed off the main thread).
+    var cleanBase by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(editBase0, params.cleanups) {
+        val b = editBase0
+        cleanBase = if (b == null || params.cleanups.isEmpty()) null else withContext(Dispatchers.Default) {
+            CleanUp.apply(if (b.isMutable) b.copy(Bitmap.Config.ARGB_8888, true) else b, params.cleanups)
+        }
+    }
+    val editBase: Bitmap? = if (params.cleanups.isNotEmpty()) cleanBase ?: editBase0 else editBase0
     val shown: Bitmap? = when {
         comparing -> original
         tab == EditTab.Live && !atKey && scrubFrame != null -> scrubFrame
@@ -216,8 +229,9 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         if (!edits.ensureBackup(m)) return null
         if (pp.isIdentity) return edits.backup(m).readBytes()
         val session = live
-        val src = if (pp.keyUs >= 0 && session != null) withContext(Dispatchers.IO) { session.frame(pp.keyUs, 6144) } else edits.decodeFull(m)
-        src ?: return null
+        val src0 = if (pp.keyUs >= 0 && session != null) withContext(Dispatchers.IO) { session.frame(pp.keyUs, 6144) } else edits.decodeFull(m, mutable = pp.cleanups.isNotEmpty())
+        src0 ?: return null
+        val src = withContext(Dispatchers.Default) { CleanUp.apply(src0, pp.cleanups) }
         val out = withContext(Dispatchers.Default) { EditRender.render(src, pp) }
         val png = m.mime.equals("image/png", true)
         var bytes = edits.encode(m, out, png)
@@ -307,6 +321,21 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                                     })
                                 },
                         )
+                        if (cleaning && !comparing) CleanUpLayer(
+                            b, params, enabled = !cleanBusy,
+                            onStroke = { pts ->
+                                val base = b
+                                val pp = params
+                                cleanBusy = true
+                                scope.launch {
+                                    val patch = withContext(Dispatchers.Default) { CleanUp.remove(ctx, base, pp, pts, CleanUp.BRUSH) }
+                                    if (patch != null) { params = params.copy(cleanups = params.cleanups + patch); cleanRedo.clear() }
+                                    cleanBusy = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 10.dp),
+                        )
+                        if (cleanBusy) CircularProgressIndicator(color = Color.White, strokeWidth = 2.5.dp, modifier = Modifier.align(Alignment.Center).size(34.dp))
                         if (markup && !comparing) MarkupLayer(
                             b, params, markTool, markColor,
                             onParams = { np -> params = np; markRedo.clear() },
@@ -324,7 +353,12 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
             }
             // ------------------------------ panel ------------------------------
             Box(Modifier.fillMaxWidth().height(168.dp), contentAlignment = Alignment.Center) {
-                if (markup) MarkupPanel(
+                if (cleaning) CleanUpPanel(
+                    backdrop,
+                    canUndo = params.cleanups.isNotEmpty(), canRedo = cleanRedo.isNotEmpty(),
+                    onUndo = { params.cleanups.lastOrNull()?.let { c -> cleanRedo.add(c); params = params.copy(cleanups = params.cleanups.dropLast(1)) } },
+                    onRedo = { cleanRedo.removeLastOrNull()?.let { c -> params = params.copy(cleanups = params.cleanups + c) } },
+                ) else if (markup) MarkupPanel(
                     backdrop, markTool, markColor,
                     canUndo = params.strokes.isNotEmpty(), canRedo = markRedo.isNotEmpty(),
                     onTool = { markTool = it }, onColor = { markColor = it },
@@ -372,7 +406,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
             // ------------------------------ tabs ------------------------------
             Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(top = 4.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
                 ModeTabs(backdrop, tabLabels, tabs.indexOf(tab).coerceAtLeast(0), onSelect = { i ->
-                    tab = tabs[i]; aspectOpen = false; markup = false
+                    tab = tabs[i]; aspectOpen = false; markup = false; cleaning = false
                     if (tab == EditTab.Live) scrubUs = keyNow
                 })
             }
@@ -419,9 +453,10 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                         )
                     }
                     else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (markup) GlassTextButton(backdrop, stringResource(R.string.done), { markup = false }, color = EditYellow)
+                        if (markup || cleaning) GlassTextButton(backdrop, stringResource(R.string.done), { markup = false; cleaning = false }, color = EditYellow)
                         else {
                             if (hadEdits) GlassTextButton(backdrop, stringResource(R.string.revert).uppercase(), { revert() }, color = p.red)
+                            GlassIconButton(backdrop, Sym.cleanup, stringResource(R.string.clean_up), { cleaning = true })
                             GlassIconButton(backdrop, Sym.markup, stringResource(R.string.markup), { markup = true })
                         }
                     }

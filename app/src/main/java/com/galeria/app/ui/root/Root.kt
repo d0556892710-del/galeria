@@ -162,6 +162,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     val lib by vm.visible.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val effects by vm.effects.collectAsStateWithLifecycle()
+    val smartIndex by vm.repo.smart.index.collectAsStateWithLifecycle()
     val albums by vm.albums.collectAsStateWithLifecycle()
     val loaded by vm.loaded.collectAsStateWithLifecycle()
     val picker = vm.picker
@@ -423,6 +424,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                     else -> {
                         val viewed = remember(lib, settings.viewed) { val m = lib.associateBy { it.id }; settings.viewed.distinct().mapNotNull { m[it] } }
                         SearchScreen(
+                            smart = smartIndex,
                             library = lib,
                             albums = albums,
                             query = vm.query,

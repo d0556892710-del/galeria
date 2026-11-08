@@ -271,6 +271,18 @@ fun Viewer(
     var livePressed by remember { mutableStateOf(false) }
     val ctxRes = LocalContext.current.resources
     val more = com.galeria.app.ui.root.rememberMoreActions(vm, actions)
+    val appCtx = LocalContext.current
+    var liveTextOn by remember { mutableStateOf(false) }
+    // Live Text: read the photo on screen once it settles.
+    val textBoxes by androidx.compose.runtime.produceState<List<TextBox>?>(null, cur?.id, cur?.dateModified, showPager) {
+        value = null
+        val m = cur
+        if (m != null && !m.isVideo && showPager) {
+            kotlinx.coroutines.delay(450)
+            value = runCatching { LiveTextEngine.read(appCtx, m) }.getOrNull()
+        }
+    }
+    LaunchedEffect(cur?.id) { liveTextOn = false }
     val bg = if (!chrome || p.dark) Color.Black else Color.White
 
     BoxWithConstraints(
@@ -306,6 +318,8 @@ fun Viewer(
                     onLivePress = { livePressed = it },
                     motion = vm.repo.motion,
                     editParams = if (live) remember(m.id, m.dateModified) { com.galeria.app.ui.editor.EditParams.fromJson(vm.repo.edits.params(m.id)) } else null,
+                    textBoxes = if (isCur && liveTextOn) textBoxes else null,
+                    onCopyText = { t -> bridge.copyText(t); overlays.toast(appCtx.getString(R.string.copied)) },
                     boxSize = boxSize,
                     onTap = { if (slideshow) slideshow = false else chrome = !chrome },
                     onDismissDrag = { d -> scope.launch { dismiss.snapTo(dismiss.value + d) } },
@@ -361,6 +375,30 @@ fun Viewer(
                     { overlays.menu(moreRect, moreMenu(cur, vs.ctx, actions, bridge, overlays, vm, more) { slideshow = true }) },
                     Modifier.align(Alignment.CenterEnd).onRootRect { moreRect = it },
                 )
+            }
+        }
+
+        // ---- Live Text ----
+        if (cur != null && !cur.isVideo && !textBoxes.isNullOrEmpty()) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(end = 16.dp, bottom = 132.dp)
+                    .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
+            ) {
+                if (chromeShown) androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (liveTextOn) {
+                        com.galeria.app.ui.components.GlassTextButton(backdrop, stringResource(R.string.copy_all), {
+                            bridge.copyText(textBoxes.orEmpty().joinToString("\n") { it.text }); overlays.toast(appCtx.getString(R.string.copied))
+                        })
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    com.galeria.app.ui.components.GlassIconButton(
+                        backdrop, Sym.liveText, stringResource(R.string.live_text), { liveTextOn = !liveTextOn },
+                        tint = if (liveTextOn) Color.White.copy(alpha = .92f) else null, iconTint = if (liveTextOn) Color.Black else null,
+                    )
+                }
             }
         }
 
@@ -476,6 +514,8 @@ private fun MediaPage(
     onLivePress: (Boolean) -> Unit,
     motion: com.galeria.app.data.MotionStore,
     editParams: com.galeria.app.ui.editor.EditParams?,
+    textBoxes: List<TextBox>?,
+    onCopyText: (String) -> Unit,
     boxSize: Size,
     onTap: () -> Unit,
     onDismissDrag: (Offset) -> Unit,
@@ -606,6 +646,7 @@ private fun MediaPage(
                     else -> LiveLayer(m, video, motion, playing = livePressed || (effect == com.galeria.app.data.LiveEffect.Loop && active), loop = effect == com.galeria.app.data.LiveEffect.Loop, edit = editParams)
                 }
             }
+            if (textBoxes != null && fit != Rect.Zero) LiveTextOverlay(textBoxes, fit, onCopyText)
         }
     }
 }

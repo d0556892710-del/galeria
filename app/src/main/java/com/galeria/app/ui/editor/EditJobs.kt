@@ -19,8 +19,8 @@ object EditJobs {
         val auto = withContext(Dispatchers.Default) { EditRender.autoVector(small) }
         val base = own ?: EditParams()
         val pp = base.copy(values = clip.values, autoVec = auto, filter = clip.filter, filterAmount = clip.filterAmount)
-        val src = edits.decodeFull(m) ?: return null
-        val out = withContext(Dispatchers.Default) { EditRender.render(src, pp) }
+        val src = edits.decodeFull(m, mutable = pp.cleanups.isNotEmpty()) ?: return null
+        val out = withContext(Dispatchers.Default) { EditRender.render(CleanUp.apply(src, pp.cleanups), pp) }
         val png = m.mime.equals("image/png", true)
         var bytes = edits.encode(m, out, png)
         if (!png && m.id in repo.motion.tags.value.live && !pp.liveOff) {

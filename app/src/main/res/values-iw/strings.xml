@@ -322,4 +322,8 @@
     <string name="markup">סימון</string>
     <string name="undo">בטל</string>
     <string name="redo">בצע שוב</string>
+    <string name="clean_up">ניקוי</string>
+    <string name="clean_up_hint">העבר אצבע על מה שתרצה להסיר.</string>
+    <string name="live_text">טקסט חי</string>
+    <string name="copy_all">העתק הכול</string>
 </resources>
