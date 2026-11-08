@@ -315,8 +315,9 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     }
 
     // One-time offer to skip the system pop-up for every delete / favourite.
-    LaunchedEffect(loaded, settingsReady) {
-        if (loaded && settingsReady && !settings.askedManageMedia && !bridge.canManageMedia() && picker == null) {
+    // (This screen only appears once the saved settings are read, so "asked" is the real value.)
+    LaunchedEffect(loaded) {
+        if (loaded && !settings.askedManageMedia && !bridge.canManageMedia() && picker == null) {
             delay(900)
             vm.markAskedManage()
             overlays.sheet(SheetSpec(
