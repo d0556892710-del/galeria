@@ -156,9 +156,12 @@ fun rememberVideoController(): VideoController {
     DisposableEffect(c) { onDispose { c.release() } }
     LaunchedEffect(c) {
         while (true) {
-            c.position = c.player.currentPosition
-            c.length = max(0L, c.player.duration)
-            delay(if (c.playing) 100 else 400)
+            if (c.current != null) {
+                c.position = c.player.currentPosition
+                c.length = max(0L, c.player.duration)
+            }
+            // Only a playing video needs a fast clock; otherwise wake rarely (saves battery).
+            delay(if (c.playing) 100 else if (c.current != null) 400 else 1500)
         }
     }
     return c

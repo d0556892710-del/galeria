@@ -398,7 +398,7 @@ private fun MenuRow(item: MenuItem, onClick: (Rect) -> Unit, red: Color) {
     ) {
         Box(Modifier.size(17.dp)) { if (item.checked) Icon(Sym.checkmark, null, Modifier.size(17.dp), tint = color) }
         if (item.icon != null) Icon(item.icon, null, Modifier.size(21.dp), tint = color)
-        Text(item.title, style = Type.body, color = color, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(item.title, style = Type.body, color = color, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (item.submenu != null) Icon(Sym.chevronForward, null, Modifier.size(13.dp), tint = color.copy(alpha = .55f))
     }
 }

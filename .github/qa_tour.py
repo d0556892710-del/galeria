@@ -71,31 +71,45 @@ W, H = size()
 def swipe_up(): adb("shell", "input", "swipe", str(W // 2), str(H * 3 // 4), str(W // 2), str(H // 4), "250"); time.sleep(1.0)
 def swipe_down(): adb("shell", "input", "swipe", str(W // 2), str(H // 3), str(W // 2), str(H * 3 // 4), "250"); time.sleep(1.0)
 
-adb("shell", "am", "force-stop", PKG)
-adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
-time.sleep(7)
+def launch():
+    adb("shell", "am", "force-stop", PKG)
+    adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
+    time.sleep(7)
+
+def on_screen(*keys):
+    want = {S.get(k, "") for k in keys} - {""}
+    return any(t.strip() in want or d.strip() in want for t, d, b in nodes())
+
+launch()
+# A system/app prompt on first run: accept it.
+tap("cancel")
 shot("library_all")
-tap("months"); shot("library_months")
-tap("years"); shot("library_years")
-tap("all_photos", "all"); shot("library_all_again")
-swipe_down(); shot("library_scrolled_up")
-swipe_up(); shot("library_scrolled_down")
-# Open a photo from the middle of the grid.
+swipe_down(); shot("library_bar")
+tap("months"); time.sleep(1); shot("library_months")
+tap("years"); time.sleep(1); shot("library_years")
+tap("all"); time.sleep(1); shot("library_all_again")
+swipe_up(); swipe_up(); shot("library_scrolled_down")
+# Viewer
+launch()
 tap_xy(W // 2, H // 2); time.sleep(1.5); shot("viewer")
-if tap("more"): shot("viewer_menu")
-if tap("use_as_wallpaper"): shot("viewer_wallpaper_menu")
-back(); back()
-if tap("edit"): time.sleep(2); shot("editor"); back(); time.sleep(1)
-if tap("info"): shot("viewer_info"); back()
-back(); time.sleep(1)
+if tap("more"):
+    shot("viewer_menu")
+    if tap("use_as_wallpaper"): shot("viewer_wallpaper_menu")
+    back()
+if tap("info"): time.sleep(1); shot("viewer_info"); back()
+if tap("edit"): time.sleep(2.5); shot("editor"); tap("cancel"); time.sleep(1); shot("after_editor_cancel")
+# Collections
+launch()
 tap("tab_collections"); time.sleep(2); shot("collections")
 swipe_up(); shot("collections_2")
 swipe_up(); shot("collections_3")
 swipe_up(); shot("collections_4")
-tap("memories"); time.sleep(1.5); shot("memories_page"); back()
-tap("media_types"); time.sleep(1.5); shot("media_types_page"); back()
-tap("search"); time.sleep(1.5); shot("search")
-back()
-tap("settings"); time.sleep(1.5); shot("settings")
-swipe_up(); shot("settings_2")
+for key in ("memories", "media_types", "utilities", "albums"):
+    launch(); tap("tab_collections"); time.sleep(1.5)
+    for _ in range(4):
+        if tap(key): time.sleep(1.5); shot(key + "_page"); break
+        swipe_up()
+launch(); tap("search"); time.sleep(1.5); shot("search")
+launch(); tap("tab_collections"); time.sleep(1.5)
+if tap("settings"): time.sleep(1.5); shot("settings"); swipe_up(); shot("settings_2"); swipe_up(); shot("settings_3")
 print("done", flush=True)
