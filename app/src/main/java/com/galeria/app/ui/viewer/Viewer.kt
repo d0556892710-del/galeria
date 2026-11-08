@@ -828,7 +828,7 @@ private fun InfoSheet(backdrop: com.galeria.app.glass.Backdrop, m: Media, action
                     if (m.displayWidth > 0) add("${m.displayWidth} × ${m.displayHeight}")
                     if (m.size > 0) add(fileSize(ctx, m.size))
                     if (m.isVideo && m.duration > 0) add(duration(m.duration))
-                }.joinToString(" · ")
+                }.joinToString(" · ") { "\u2066$it\u2069" } // each piece kept whole in Hebrew too
                 if (spec.isNotBlank()) Text(spec, style = Type.footnote, color = p.secondaryLabel, modifier = Modifier.padding(top = 3.dp))
                 val shot = buildList {
                     e?.iso?.let { add("ISO $it") }

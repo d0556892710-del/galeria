@@ -60,6 +60,8 @@ import com.galeria.app.data.GlassMode
 import com.galeria.app.data.ThemeMode
 import com.galeria.app.glass.Backdrop
 import com.galeria.app.glass.backdropSource
+import com.galeria.app.glass.scrollEdge
+import androidx.compose.foundation.layout.asPaddingValues
 import com.galeria.app.ui.components.GlassIconButton
 import com.galeria.app.ui.components.GlassSurface
 import com.galeria.app.ui.components.Sym
@@ -195,6 +197,9 @@ fun SettingsScreen(vm: AppViewModel, backdrop: Backdrop, onBack: () -> Unit) {
             Header(stringResource(R.string.about))
             Group { NavRow(stringResource(R.string.version), version, chevron = false) {} }
         }
+        // Scroll edge, like the other pages: rows fade out under the status bar and the back button.
+        val top = androidx.compose.foundation.layout.WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        Box(Modifier.fillMaxWidth().height(top + 70.dp).scrollEdge(backdrop, true, p.groupedBackground.copy(alpha = if (p.dark) .55f else .7f), 24f))
         Box(Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(start = 16.dp, top = 8.dp)) {
             GlassIconButton(backdrop, Sym.chevronBack, stringResource(R.string.back), onBack)
         }
