@@ -143,6 +143,11 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
     var comparing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val lastValues = remember { HashMap<Tool, Float>() }
+    // Markup
+    var markup by remember { mutableStateOf(false) }
+    var markTool by remember { mutableStateOf(MarkTool.PEN) }
+    var markColor by remember { mutableStateOf(MarkColors[2]) }
+    val markRedo = remember { androidx.compose.runtime.mutableStateListOf<Stroke>() }
 
     var live by remember { mutableStateOf<LiveSession?>(null) }
     var liveFile by remember { mutableStateOf<File?>(null) }
@@ -302,6 +307,11 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                                     })
                                 },
                         )
+                        if (markup && !comparing) MarkupLayer(
+                            b, params, markTool, markColor,
+                            onParams = { np -> params = np; markRedo.clear() },
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 10.dp),
+                        )
                     }
                 } else {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(28.dp))
@@ -314,7 +324,13 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
             }
             // ------------------------------ panel ------------------------------
             Box(Modifier.fillMaxWidth().height(168.dp), contentAlignment = Alignment.Center) {
-                Crossfade(tab, animationSpec = tween(160), label = "panel") { t ->
+                if (markup) MarkupPanel(
+                    backdrop, markTool, markColor,
+                    canUndo = params.strokes.isNotEmpty(), canRedo = markRedo.isNotEmpty(),
+                    onTool = { markTool = it }, onColor = { markColor = it },
+                    onUndo = { params.strokes.lastOrNull()?.let { st -> markRedo.add(st); params = params.copy(strokes = params.strokes.dropLast(1)) } },
+                    onRedo = { markRedo.removeLastOrNull()?.let { st -> params = params.copy(strokes = params.strokes + st) } },
+                ) else Crossfade(tab, animationSpec = tween(160), label = "panel") { t ->
                     when (t) {
                         EditTab.Adjust -> AdjustPanel(params, tool, onTool = { nt ->
                             if (nt == tool) {
@@ -356,7 +372,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
             // ------------------------------ tabs ------------------------------
             Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(top = 4.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
                 ModeTabs(backdrop, tabLabels, tabs.indexOf(tab).coerceAtLeast(0), onSelect = { i ->
-                    tab = tabs[i]; aspectOpen = false
+                    tab = tabs[i]; aspectOpen = false; markup = false
                     if (tab == EditTab.Live) scrubUs = keyNow
                 })
             }
@@ -402,7 +418,13 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                             stringResource(if (params.muted) R.string.unmute else R.string.mute), { params = params.copy(muted = !params.muted) },
                         )
                     }
-                    else -> if (hadEdits) GlassTextButton(backdrop, stringResource(R.string.revert).uppercase(), { revert() }, color = p.red)
+                    else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (markup) GlassTextButton(backdrop, stringResource(R.string.done), { markup = false }, color = EditYellow)
+                        else {
+                            if (hadEdits) GlassTextButton(backdrop, stringResource(R.string.revert).uppercase(), { revert() }, color = p.red)
+                            GlassIconButton(backdrop, Sym.markup, stringResource(R.string.markup), { markup = true })
+                        }
+                    }
                 }
             }
             GlassIconButton(
@@ -448,7 +470,7 @@ private fun EditPreview(bmp: Bitmap, params: EditParams, shader: Any?, modifier:
 }
 
 @Composable
-private fun AdjustPanel(params: EditParams, tool: Tool, onTool: (Tool) -> Unit, onValue: (Float) -> Unit) {
+internal fun AdjustPanel(params: EditParams, tool: Tool, onTool: (Tool) -> Unit, onValue: (Float) -> Unit) {
     val state = rememberLazyListState()
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         ToolLabel(stringResource(tool.label))
@@ -462,7 +484,7 @@ private fun AdjustPanel(params: EditParams, tool: Tool, onTool: (Tool) -> Unit, 
 }
 
 @Composable
-private fun FiltersPanel(small: Bitmap?, params: EditParams, onFilter: (Filter) -> Unit, onAmount: (Float) -> Unit) {
+internal fun FiltersPanel(small: Bitmap?, params: EditParams, onFilter: (Filter) -> Unit, onAmount: (Float) -> Unit) {
     val state = rememberLazyListState()
     val shaders = remember { Filter.entries.map { EditRender.newShader() } }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -570,7 +592,7 @@ private fun CropToolCircle(t: CropTool, value: Float, selected: Boolean) {
 }
 
 @Composable
-private fun AspectPicker(backdrop: com.galeria.app.glass.Backdrop, params: EditParams, original: Bitmap?, onParams: (EditParams) -> Unit) {
+internal fun AspectPicker(backdrop: com.galeria.app.glass.Backdrop, params: EditParams, original: Bitmap?, onParams: (EditParams) -> Unit) {
     val w = original?.width?.toFloat() ?: 1f
     val h = original?.height?.toFloat() ?: 1f
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -647,7 +669,7 @@ private fun LivePanel(
     }
 }
 
-private fun scaleTo(b: Bitmap, side: Int): Bitmap {
+internal fun scaleTo(b: Bitmap, side: Int): Bitmap {
     val s = side.toFloat() / max(b.width, b.height)
     if (s >= 1f) return b
     return Bitmap.createScaledBitmap(b, max(1, (b.width * s).toInt()), max(1, (b.height * s).toInt()), true)

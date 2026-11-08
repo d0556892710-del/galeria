@@ -183,4 +183,14 @@ object Sym {
     val portraitRect = build("portraitRect") { s(rrect(6.5f, 3f, 11f, 18f, 2.5f), 1.9f) }
     val landscapeRect = build("landscapeRect") { s(rrect(3f, 6.5f, 18f, 11f, 2.5f), 1.9f) }
     val folder = build("folder") { s("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", 1.8f) }
+
+    // ---- markup ----
+    val pen = build("pen") { s("M5 19l1.2-4.2L15.5 5.5a2.1 2.1 0 0 1 3 3L9.2 17.8z", 1.8f); s("M13.8 7.2l3 3", 1.6f) }
+    val marker = build("marker") { s("M7 15l7.5-11 4.5 3-7.5 11z", 1.8f); s("M7 15l-1.5 4.5 4.5-1.5", 1.8f); s("M3.5 21h7", 1.8f, .6f) }
+    val pencil = build("pencil") { s("M6 18l1-3.5L16.5 5l2.5 2.5L9.5 17z", 1.6f); s("M6 18l3.5-1", 1.6f) }
+    val eraser = build("eraser") { s("M9.5 19.5l-5-5a1.5 1.5 0 0 1 0-2.1L13 4a1.5 1.5 0 0 1 2.1 0l5 5a1.5 1.5 0 0 1 0 2.1l-8.4 8.4z", 1.8f); s("M8.5 9l6.5 6.5M9.5 19.5h10", 1.6f) }
+    val undo = build("undo") { s("M9 13.5L4.5 9 9 4.5", 2f); s("M4.5 9h10a5 5 0 0 1 0 10H11", 2f) }
+    val redo = build("redo") { s("M15 13.5L19.5 9 15 4.5", 2f); s("M19.5 9h-10a5 5 0 0 0 0 10H13", 2f) }
+    val markup = build("markup") { s(circle(12f, 12f, 9.5f), 1.7f); s("M8.5 15.5l.7-2.4 5.6-5.6a1.3 1.3 0 0 1 1.8 1.8l-5.6 5.6z", 1.6f) }
+    val scissors = build("scissors") { s(circle(6.5f, 6.5f, 2.6f), 1.8f); s(circle(6.5f, 17.5f, 2.6f), 1.8f); s("M8.6 8.2L20 17M8.6 15.8L20 7", 1.8f) }
 }

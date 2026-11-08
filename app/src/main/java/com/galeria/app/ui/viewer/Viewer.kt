@@ -399,7 +399,7 @@ fun Viewer(
                     onShare = { bridge.share(listOf(cur)) },
                     onFav = { actions.setFavourite(listOf(cur), !cur.isFavorite) },
                     onInfo = { infoOpen = true },
-                    onEdit = { msg -> if (cur.isVideo) overlays.toast(msg) else { infoOpen = false; vm.editing = cur } },
+                    onEdit = { _ -> infoOpen = false; video.stop(); vm.editing = cur },
                     onDelete = {
                         when (vs.ctx) {
                             ViewerCtx.Hidden -> actions.confirmDeleteForever(listOf(cur))

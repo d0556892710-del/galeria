@@ -79,6 +79,8 @@ data class EditParams(
     val muted: Boolean = false,
     val trimStartUs: Long = 0L,
     val trimEndUs: Long = -1L,
+    /** Markup drawn on the photo, in the edited picture's own 0…1 coordinates. */
+    val strokes: List<Stroke> = emptyList(),
 ) {
     val auto: Float get() = values[Tool.Auto.ordinal]
 
@@ -100,7 +102,7 @@ data class EditParams(
         get() = rot != 0 || flip || kotlin.math.abs(straighten) > .05f || kotlin.math.abs(vertical) > .004f || kotlin.math.abs(horizontal) > .004f ||
             crop.left > .001f || crop.top > .001f || crop.right < .999f || crop.bottom < .999f
     val liveChanged: Boolean get() = keyUs >= 0 || liveOff || trimStartUs > 0 || trimEndUs >= 0
-    val isIdentity: Boolean get() = !adjusted && filter == Filter.Original && !geometryChanged && !liveChanged
+    val isIdentity: Boolean get() = !adjusted && filter == Filter.Original && !geometryChanged && !liveChanged && strokes.isEmpty()
 
     fun resetGeometry() = copy(rot = 0, flip = false, straighten = 0f, vertical = 0f, horizontal = 0f, crop = Rect(0f, 0f, 1f, 1f), aspect = Aspect.Freeform)
 
@@ -112,6 +114,9 @@ data class EditParams(
         put("crop", JSONArray(listOf(crop.left, crop.top, crop.right, crop.bottom).map { it.toDouble() }))
         put("aspect", aspect.name); put("pa", portraitAspect)
         put("key", keyUs); put("loff", liveOff); put("mute", muted); put("ts", trimStartUs); put("te", trimEndUs)
+        put("strokes", JSONArray(strokes.map { st ->
+            JSONObject().put("t", st.tool).put("c", st.color).put("w", st.width.toDouble()).put("p", JSONArray(st.points.map { it.toDouble() }))
+        }))
     }.toString()
 
     companion object {
@@ -131,7 +136,26 @@ data class EditParams(
                 portraitAspect = o.optBoolean("pa"),
                 keyUs = o.optLong("key", -1L), liveOff = o.optBoolean("loff"), muted = o.optBoolean("mute"),
                 trimStartUs = o.optLong("ts", 0L), trimEndUs = o.optLong("te", -1L),
+                strokes = o.optJSONArray("strokes")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        runCatching {
+                            val so = arr.getJSONObject(i); val pa = so.getJSONArray("p")
+                            Stroke(so.getInt("t"), so.getInt("c"), so.getDouble("w").toFloat(), List(pa.length()) { k -> pa.getDouble(k).toFloat() })
+                        }.getOrNull()
+                    }
+                } ?: emptyList(),
             )
         }.getOrNull()
+    }
+}
+
+
+/** One Markup stroke. [points] are x,y pairs in 0…1 of the edited picture; [width] is a fraction of its width. */
+@Immutable
+data class Stroke(val tool: Int, val color: Int, val width: Float, val points: List<Float>) {
+    companion object {
+        const val PEN = 0
+        const val MARKER = 1
+        const val PENCIL = 2
     }
 }

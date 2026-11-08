@@ -590,10 +590,12 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
         // ------------------------------ editor ------------------------------
         vm.editing?.let { m ->
             key(m.id) {
-                com.galeria.app.ui.editor.Editor(vm, m, onClose = {
+                val close = {
                     vm.editing = null
                     bridge.setSystemBars(true)
-                })
+                }
+                if (m.isVideo) com.galeria.app.ui.editor.VideoEditor(vm, m, onClose = close)
+                else com.galeria.app.ui.editor.Editor(vm, m, onClose = close)
             }
         }
     }

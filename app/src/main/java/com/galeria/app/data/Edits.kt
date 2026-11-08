@@ -150,11 +150,18 @@ class EditStore(private val context: Context) {
         }.getOrDefault(false)
     }
 
+    /** Overwrite the item with a file's contents, streamed (videos can be large). */
+    suspend fun writeFile(m: Media, f: File): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openOutputStream(m.uri, "wt")?.use { o -> f.inputStream().use { it.copyTo(o, 1 shl 16) }; true } ?: false
+        }.getOrDefault(false)
+    }
+
     /** Put the original back. */
     suspend fun revert(m: Media): Boolean = withContext(Dispatchers.IO) {
         val f = backup(m)
         if (!f.exists()) return@withContext false
-        val ok = write(m, f.readBytes())
+        val ok = writeFile(m, f)
         if (ok) { f.delete(); setParams(m.id, null) }
         ok
     }

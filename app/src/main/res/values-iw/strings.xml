@@ -316,4 +316,10 @@
     <string name="cant_change">לא ניתן לשנות פריט זה</string>
     <string name="merge_msg">העותק הטוב ביותר של כל תמונה יישמר, והשאר יעברו ל״נמחקו לאחרונה״.</string>
     <plurals name="merge_count"><item quantity="one">מזג כפילות אחת</item><item quantity="two">מזג %d כפילויות</item><item quantity="many">מזג %d כפילויות</item><item quantity="other">מזג %d כפילויות</item></plurals>
+    <string name="tab_video">וידאו</string>
+    <string name="save_video">שמור וידאו</string>
+    <string name="save_new_clip">שמור וידאו כקליפ חדש</string>
+    <string name="markup">סימון</string>
+    <string name="undo">בטל</string>
+    <string name="redo">בצע שוב</string>
 </resources>

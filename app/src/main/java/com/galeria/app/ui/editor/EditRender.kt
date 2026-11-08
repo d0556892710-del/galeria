@@ -267,10 +267,43 @@ object EditRender {
         }
         canvas.save()
         canvas.scale(scale, scale)
+        canvas.save()
         canvas.translate(-p.crop.left * bw, -p.crop.top * bh)
         canvas.concat(matrix(p, w, h))
         canvas.drawRect(0f, 0f, w, h, paint)
         canvas.restore()
+        if (p.strokes.isNotEmpty()) {
+            val (ow, oh) = outputSize(p, w, h)
+            drawStrokes(canvas, p.strokes, ow, oh)
+        }
+        canvas.restore()
+    }
+
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
+
+    /** Markup: smooth pen, translucent marker, fine pencil. */
+    fun drawStrokes(canvas: Canvas, strokes: List<Stroke>, ow: Float, oh: Float) {
+        for (st in strokes) {
+            val pts = st.points
+            if (pts.size < 2) continue
+            val paint = strokePaint
+            paint.color = st.color
+            paint.strokeCap = if (st.tool == Stroke.MARKER) Paint.Cap.SQUARE else Paint.Cap.ROUND
+            paint.alpha = when (st.tool) { Stroke.MARKER -> 110; Stroke.PENCIL -> 215; else -> 255 }
+            paint.strokeWidth = (st.width * ow).coerceAtLeast(1f)
+            val path = android.graphics.Path()
+            path.moveTo(pts[0] * ow, pts[1] * oh)
+            if (pts.size == 2) path.lineTo(pts[0] * ow + .5f, pts[1] * oh + .5f)
+            var i = 2
+            while (i + 1 < pts.size) {
+                val px = pts[i - 2] * ow; val py = pts[i - 1] * oh
+                val x = pts[i] * ow; val y = pts[i + 1] * oh
+                path.quadTo(px, py, (px + x) / 2f, (py + y) / 2f)
+                i += 2
+            }
+            path.lineTo(pts[pts.size - 2] * ow, pts[pts.size - 1] * oh)
+            canvas.drawPath(path, paint)
+        }
     }
 
     /** Full-resolution render for saving. Runs on the GPU when it can. */
