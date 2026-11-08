@@ -59,16 +59,20 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Publish APK to the "latest" release
+      - name: Publish APK as a release of its own version
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk Photos.apk
           VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          # Each version gets its own release and is never replaced, so a download in progress is never cut off.
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            echo "Release v$VER already exists; keeping it untouched."
+            exit 0
+          fi
+          cp app/build/outputs/apk/release/app-release.apk Photos.apk
           cp Photos.apk "Photos-$VER.apk"
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest Photos.apk "Photos-$VER.apk" --title "Photos $VER" --notes "Version $VER, built from ${GITHUB_SHA::7}" --latest
+          gh release create "v$VER" Photos.apk "Photos-$VER.apk" --title "Photos $VER" --notes "Version $VER, built from ${GITHUB_SHA::7}" --latest
 
       - name: Report APK size
         run: |
@@ -80,3 +84,44 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Download the APK from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
           fi
+
+  smoke-test:
+    # Installs the new APK on a virtual phone, installs it again over itself as an update, opens it and taps around.
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: galeria-apk
+          path: apk
+      - name: Make test photos
+        run: |
+          command -v convert >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
+          mkdir -p testphotos
+          for i in $(seq 1 40); do
+            convert -size 1200x900 "gradient:#$(openssl rand -hex 3)-#$(openssl rand -hex 3)" -fill white -pointsize 90 -gravity center -annotate 0 "Photo $i" "testphotos/IMG_$i.jpg"
+          done
+          ls testphotos | wc -l
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install, update and run on a virtual phone
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash .github/smoke.sh
+      - name: Results
+        if: always()
+        run: |
+          cat smoke-result.txt 2>/dev/null || echo "no result file"
+          cat smoke-result.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          grep -q "RESULT: PASS" smoke-result.txt
