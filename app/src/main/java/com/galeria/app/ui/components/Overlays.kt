@@ -1,5 +1,8 @@
 package com.galeria.app.ui.components
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -85,8 +88,22 @@ data class MenuSpec(val title: String? = null, val groups: List<List<MenuItem>>)
 data class SheetAction(val title: String, val destructive: Boolean = false, val onClick: () -> Unit)
 data class SheetSpec(val message: String?, val actions: List<SheetAction>)
 
+/** A small iOS alert with a text field (New Album, Rename…). */
+data class PromptSpec(
+    val title: String,
+    val message: String? = null,
+    val initial: String = "",
+    val placeholder: String = "",
+    val confirm: String,
+    val onConfirm: (String) -> Unit,
+)
+
 /** Menus, action sheets and toasts, drawn above everything on Liquid Glass. */
 class Overlays {
+    var prompt by mutableStateOf<PromptSpec?>(null)
+        internal set
+    fun prompt(spec: PromptSpec) { closeMenus(); prompt = spec }
+    fun closePrompt() { prompt = null }
     internal val menus = mutableStateListOf<Pair<MenuSpec, Rect>>()
     var sheet by mutableStateOf<SheetSpec?>(null)
         internal set
@@ -104,7 +121,7 @@ class Overlays {
     fun toast(text: String) {
         toastText = text; toastId++
     }
-    val anyOpen: Boolean get() = menus.isNotEmpty() || sheet != null
+    val anyOpen: Boolean get() = menus.isNotEmpty() || sheet != null || prompt != null
 }
 
 val LocalOverlays = staticCompositionLocalOf { Overlays() }
@@ -113,6 +130,91 @@ private val MenuWidth = 254.dp
 
 @Composable
 fun OverlayHost(backdrop: Backdrop?, overlays: Overlays) {
+    OverlayHostContent(backdrop, overlays)
+    overlays.prompt?.let { spec -> PromptCard(backdrop, spec) { overlays.closePrompt() } }
+}
+
+@Composable
+private fun PromptCard(backdrop: Backdrop?, spec: PromptSpec, onDismiss: () -> Unit) {
+    val p = com.galeria.app.ui.theme.LocalPalette.current
+    var text by remember(spec) {
+        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(spec.initial, androidx.compose.ui.text.TextRange(0, spec.initial.length)))
+    }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(spec) { kotlinx.coroutines.delay(120); runCatching { focus.requestFocus() } }
+    fun confirm() {
+        val t = text.text.trim()
+        if (t.isEmpty()) return
+        onDismiss(); spec.onConfirm(t)
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = .3f))
+            .clickable(remember { MutableInteractionSource() }, null) { onDismiss() }
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        GlassSurface(
+            backdrop,
+            Modifier.width(300.dp).clickable(remember { MutableInteractionSource() }, null) {},
+            androidx.compose.foundation.shape.RoundedCornerShape(30.dp),
+            tint = p.background.copy(alpha = .86f),
+        ) {
+            androidx.compose.foundation.layout.Column(
+                Modifier.padding(top = 20.dp, bottom = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(spec.title, style = com.galeria.app.ui.theme.Type.headline, color = p.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 20.dp))
+                spec.message?.let {
+                    Text(it, style = com.galeria.app.ui.theme.Type.footnote, color = p.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp))
+                }
+                androidx.compose.foundation.layout.Spacer(Modifier.height(14.dp))
+                androidx.compose.foundation.text.BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    textStyle = com.galeria.app.ui.theme.Type.body.copy(color = p.label),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(p.blue),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { confirm() }),
+                    modifier = Modifier
+                        .padding(horizontal = 18.dp)
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                        .background(p.fill)
+                        .padding(horizontal = 12.dp, vertical = 11.dp)
+                        .focusRequester(focus),
+                    decorationBox = { inner ->
+                        Box {
+                            if (text.text.isEmpty()) Text(spec.placeholder, style = com.galeria.app.ui.theme.Type.body, color = p.tertiaryLabel)
+                            inner()
+                        }
+                    },
+                )
+                androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+                androidx.compose.foundation.layout.Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        Modifier.weight(1f).height(48.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp)).background(p.fill).pressable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(androidx.compose.ui.res.stringResource(com.galeria.app.R.string.cancel), style = com.galeria.app.ui.theme.Type.body, color = p.label) }
+                    val ok = text.text.isNotBlank()
+                    Box(
+                        Modifier.weight(1f).height(48.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                            .background(if (ok) p.blue else p.fill).pressable(enabled = ok) { confirm() },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(spec.confirm, style = com.galeria.app.ui.theme.Type.headline, color = if (ok) androidx.compose.ui.graphics.Color.White else p.tertiaryLabel) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverlayHostContent(backdrop: Backdrop?, overlays: Overlays) {
     val density = LocalDensity.current
     val dir = LocalLayoutDirection.current
     val screenW = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }

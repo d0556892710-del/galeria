@@ -270,6 +270,7 @@ fun Viewer(
     val effects by vm.repo.edits.effects.collectAsState()
     var livePressed by remember { mutableStateOf(false) }
     val ctxRes = LocalContext.current.resources
+    val more = com.galeria.app.ui.root.rememberMoreActions(vm, actions)
     val bg = if (!chrome || p.dark) Color.Black else Color.White
 
     BoxWithConstraints(
@@ -357,7 +358,7 @@ fun Viewer(
                 }
                 GlassIconButton(
                     backdrop, Sym.ellipsis, stringResource(R.string.more),
-                    { overlays.menu(moreRect, moreMenu(cur, vs.ctx, actions, bridge, overlays, vm) { slideshow = true }) },
+                    { overlays.menu(moreRect, moreMenu(cur, vs.ctx, actions, bridge, overlays, vm, more) { slideshow = true }) },
                     Modifier.align(Alignment.CenterEnd).onRootRect { moreRect = it },
                 )
             }
@@ -425,7 +426,7 @@ fun Viewer(
 
 private fun moreMenu(
     m: Media, ctx: ViewerCtx, actions: Actions, bridge: com.galeria.app.ui.root.Bridge,
-    overlays: com.galeria.app.ui.components.Overlays, vm: AppViewModel, startSlideshow: () -> Unit,
+    overlays: com.galeria.app.ui.components.Overlays, vm: AppViewModel, more: com.galeria.app.ui.root.MoreActions, startSlideshow: () -> Unit,
 ): MenuSpec {
     val res = vm.getApplication<android.app.Application>().resources
     fun s(id: Int) = res.getString(id)
@@ -435,11 +436,31 @@ private fun moreMenu(
         if (ctx == ViewerCtx.Hidden) add(MenuItem(s(R.string.unhide), Sym.eye) { actions.unhide(listOf(m)) })
         else if (ctx != ViewerCtx.External) add(MenuItem(s(R.string.hide), Sym.eyeSlash) { actions.hide(listOf(m)) })
     }
+    val library = ctx != ViewerCtx.Hidden && ctx != ViewerCtx.External
+    val albums = buildList {
+        if (library) add(MenuItem(s(R.string.add_to_album), Sym.photo) { more.addToAlbum(listOf(m)) })
+        if (ctx == ViewerCtx.Page || ctx == ViewerCtx.Search) add(MenuItem(s(R.string.show_in_all), Sym.grid) {
+            vm.viewer = null; vm.pages = emptyList(); vm.searching = false
+            vm.tab = com.galeria.app.ui.root.Tab.Library; vm.zoom = com.galeria.app.ui.root.Zoom.All
+            vm.reveal = m.id
+        })
+    }
     val second = buildList {
         add(MenuItem(s(R.string.slideshow), Sym.playRectangle) { startSlideshow() })
         if (!m.isVideo) add(MenuItem(s(R.string.use_as_wallpaper), Sym.wallpaper) { bridge.setWallpaper(m) })
     }
-    return MenuSpec(groups = listOf(first, second))
+    val info = buildList {
+        if (library) {
+            add(MenuItem(s(R.string.adjust_date), Sym.clock) { more.adjustDate(listOf(m)) })
+            add(MenuItem(s(R.string.adjust_location), Sym.map, submenu = { more.locationMenu(listOf(m)) }))
+        }
+        if (library && !m.isVideo) {
+            if (more.canCopyEdits(m)) add(MenuItem(s(R.string.copy_edits), Sym.sliders) { more.copyEdits(m) })
+            if (com.galeria.app.data.MetaClipboard.editsJson != null) add(MenuItem(s(R.string.paste_edits), Sym.sliders) { more.pasteEdits(listOf(m)) })
+            if (vm.repo.edits.hasBackup(m)) add(MenuItem(s(R.string.revert_to_original), Sym.arrowDownCircle, destructive = true) { more.revert(m) })
+        }
+    }
+    return MenuSpec(groups = listOf(first, albums, second, info).filter { it.isNotEmpty() })
 }
 
 @Composable

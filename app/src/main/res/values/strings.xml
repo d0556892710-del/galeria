@@ -281,4 +281,32 @@
     <string name="side_right">Right Side</string>
     <string name="side_left">Left Side</string>
     <string name="fast_scroller_footer">Where the handle for jumping through the library appears while you scroll.</string>
+    <string name="new_album">New Album</string>
+    <string name="new_album_msg">Enter a name for this album.</string>
+    <string name="album_name">Title</string>
+    <string name="save">Save</string>
+    <string name="added_to">Added to %1$s</string>
+    <string name="add_to_album">Add to Album</string>
+    <string name="remove_from_album">Remove from Album</string>
+    <string name="rename">Rename</string>
+    <string name="rename_album">Rename Album</string>
+    <string name="delete_album">Delete Album</string>
+    <string name="delete_album_msg">The album will be deleted. Its photos stay in your library.</string>
+    <string name="adjust_date">Adjust Date &amp; Time</string>
+    <string name="adjust_location">Adjust Location</string>
+    <string name="copy_location">Copy Location</string>
+    <string name="paste_location">Paste Location</string>
+    <string name="remove_location">Remove Location</string>
+    <string name="no_location">No location</string>
+    <string name="copy_edits">Copy Edits</string>
+    <string name="paste_edits">Paste Edits</string>
+    <string name="pasting_edits">Pasting edits…</string>
+    <string name="edits_pasted">Edits pasted</string>
+    <string name="edits_copied">Edits copied</string>
+    <string name="show_in_all">Show in All Photos</string>
+    <string name="date_updated">Date updated</string>
+    <string name="location_updated">Location updated</string>
+    <string name="cant_change">This item can\'t be changed</string>
+    <string name="merge_msg">Keep the best copy of each photo. The others move to Recently Deleted.</string>
+    <plurals name="merge_count"><item quantity="one">Merge %d Duplicate</item><item quantity="other">Merge %d Duplicates</item></plurals>
 </resources>

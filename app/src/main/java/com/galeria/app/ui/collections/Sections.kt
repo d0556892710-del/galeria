@@ -129,7 +129,10 @@ fun pinnableEntries(vm: AppViewModel, lib: List<Media>, albums: List<Album>, tag
         val m = LinkedHashMap<String, Entry>()
         utils.filter { it.key != "hidden" && it.key != "deleted" }.forEach { m[it.key] = it }
         types.forEach { m[it.key] = it }
-        albums.forEach { a -> m["album:${a.id}"] = Entry("album:${a.id}", Sym.folder, a.name, Page.Bucket(a.id, a.name), lib.filter { it.bucketId == a.id }) }
+        albums.forEach { a ->
+            val ids = if (a.user) vm.repo.albums.albums.value.firstOrNull { it.id == a.id }?.items?.toHashSet() ?: emptySet() else null
+            m["album:${a.id}"] = Entry("album:${a.id}", Sym.folder, a.name, a.page, lib.filter { if (ids != null) it.id in ids else it.bucketId == a.id })
+        }
         m
     }
 }
@@ -166,8 +169,8 @@ fun SectionListPage(vm: AppViewModel, page: Page, backdrop: Backdrop, onBack: ()
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     item(span = { GridItemSpan(maxLineSpan) }) { LargeTitle(title) }
-                    items(albums, key = { it.id }) { a ->
-                        AlbumCard(a, onOpen = { vm.push(Page.Bucket(a.id, a.name)) }, onMenu = { r -> overlays.menu(r, albumMenu(vm, ctx, overlays, a, settings)) })
+                    items(albums, key = { it.key }) { a ->
+                        AlbumCard(a, onOpen = { vm.push(a.page) }, onMenu = { r -> overlays.menu(r, albumMenu(vm, ctx, overlays, a, settings)) })
                     }
                 }
                 Page.PinnedList -> {
@@ -203,6 +206,15 @@ fun SectionListPage(vm: AppViewModel, page: Page, backdrop: Backdrop, onBack: ()
             verticalAlignment = Alignment.CenterVertically,
         ) {
             GlassIconButton(backdrop, Sym.chevronBack, stringResource(R.string.back), onBack)
+            if (page == Page.AllAlbums) {
+                Spacer(Modifier.weight(1f))
+                GlassIconButton(backdrop, Sym.plus, stringResource(R.string.new_album), {
+                    overlays.prompt(com.galeria.app.ui.components.PromptSpec(
+                        title = ctx.getString(R.string.new_album), message = ctx.getString(R.string.new_album_msg),
+                        placeholder = ctx.getString(R.string.album_name), confirm = ctx.getString(R.string.save),
+                    ) { name -> vm.createAlbum(name) })
+                })
+            }
         }
     }
 }
@@ -283,7 +295,8 @@ fun AlbumCard(a: Album, onOpen: () -> Unit, onMenu: (Rect) -> Unit) {
             .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = { onMenu(rect) }, onClick = onOpen)
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(p.fill)) {
-            ThumbImage(a.cover, 512, Modifier.fillMaxSize())
+            a.cover?.let { ThumbImage(it, 512, Modifier.fillMaxSize()) }
+                ?: Icon(Sym.photo, null, Modifier.align(Alignment.Center).size(34.dp), tint = p.tertiaryLabel)
         }
         Spacer(Modifier.height(7.dp))
         Text(a.name, style = Type.subheadSemibold, color = p.label, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -288,4 +288,32 @@
     <string name="side_right">צד ימין</string>
     <string name="side_left">צד שמאל</string>
     <string name="fast_scroller_footer">באיזה צד תופיע הידית לקפיצה מהירה בספרייה בזמן גלילה.</string>
+    <string name="new_album">אלבום חדש</string>
+    <string name="new_album_msg">הזן שם לאלבום.</string>
+    <string name="album_name">שם</string>
+    <string name="save">שמור</string>
+    <string name="added_to">נוסף ל־%1$s</string>
+    <string name="add_to_album">הוסף לאלבום</string>
+    <string name="remove_from_album">הסר מהאלבום</string>
+    <string name="rename">שנה שם</string>
+    <string name="rename_album">שינוי שם האלבום</string>
+    <string name="delete_album">מחק אלבום</string>
+    <string name="delete_album_msg">האלבום יימחק. התמונות שבו יישארו בספרייה.</string>
+    <string name="adjust_date">התאם תאריך ושעה</string>
+    <string name="adjust_location">התאם מיקום</string>
+    <string name="copy_location">העתק מיקום</string>
+    <string name="paste_location">הדבק מיקום</string>
+    <string name="remove_location">הסר מיקום</string>
+    <string name="no_location">אין מיקום</string>
+    <string name="copy_edits">העתק עריכות</string>
+    <string name="paste_edits">הדבק עריכות</string>
+    <string name="pasting_edits">מדביק עריכות…</string>
+    <string name="edits_pasted">העריכות הודבקו</string>
+    <string name="edits_copied">העריכות הועתקו</string>
+    <string name="show_in_all">הצג בכל התמונות</string>
+    <string name="date_updated">התאריך עודכן</string>
+    <string name="location_updated">המיקום עודכן</string>
+    <string name="cant_change">לא ניתן לשנות פריט זה</string>
+    <string name="merge_msg">העותק הטוב ביותר של כל תמונה יישמר, והשאר יעברו ל״נמחקו לאחרונה״.</string>
+    <plurals name="merge_count"><item quantity="one">מזג כפילות אחת</item><item quantity="two">מזג %d כפילויות</item><item quantity="many">מזג %d כפילויות</item><item quantity="other">מזג %d כפילויות</item></plurals>
 </resources>

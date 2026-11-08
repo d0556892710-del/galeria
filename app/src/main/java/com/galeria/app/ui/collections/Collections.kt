@@ -101,8 +101,8 @@ fun CollectionsScreen(
         if (albums.isNotEmpty()) item(key = "albums") {
             Section("albums", stringResource(R.string.albums), collapsed, onToggle, onTitle = { onOpen(Page.AllAlbums) }) {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(albums, key = { it.id }) { a ->
-                        CoverCard(a.cover, a.name, Sym.photo, count = a.count, onLongPress = { r -> onAlbumMenu(a, r) }) { onOpen(Page.Bucket(a.id, a.name)) }
+                    items(albums, key = { it.key }) { a ->
+                        CoverCard(a.cover, a.name, Sym.photo, count = a.count, onLongPress = { r -> onAlbumMenu(a, r) }) { onOpen(a.page) }
                     }
                 }
             }

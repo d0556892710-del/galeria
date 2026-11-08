@@ -23,6 +23,9 @@ import com.galeria.app.glass.Backdrop
 import com.galeria.app.ui.components.GlassIconButton
 import com.galeria.app.ui.components.GlassTextButton
 import com.galeria.app.ui.components.Sym
+import com.galeria.app.ui.components.onRootRect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.galeria.app.ui.components.plural
 import com.galeria.app.ui.theme.LocalPalette
 import com.galeria.app.ui.theme.Type
@@ -48,7 +51,10 @@ fun SelectionBar(
     extraLabel: String? = null,
     onExtra: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** The iPhone "…" with Add to Album, Favourite, Date & Time, Location… */
+    onMore: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
 ) {
+    var moreRect by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val p = LocalPalette.current
     Row(
         modifier
@@ -61,7 +67,14 @@ fun SelectionBar(
         Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
             Text(selectionLabel(chosen), style = Type.subheadSemibold, color = p.label, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
-        if (extraLabel != null && onExtra != null) {
+        if (onMore != null) {
+            GlassIconButton(
+                backdrop, Sym.ellipsis, stringResource(R.string.more), { if (chosen.isNotEmpty()) onMore(moreRect) },
+                Modifier.onRootRect { moreRect = it },
+                size = 50.dp, iconSize = 23.dp, enabled = chosen.isNotEmpty(),
+            )
+            Spacer(Modifier.width(10.dp))
+        } else if (extraLabel != null && onExtra != null) {
             GlassTextButton(backdrop, extraLabel, { if (chosen.isNotEmpty()) onExtra() })
             Spacer(Modifier.width(10.dp))
         }

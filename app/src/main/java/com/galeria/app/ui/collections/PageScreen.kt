@@ -2,6 +2,7 @@ package com.galeria.app.ui.collections
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,7 +77,8 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
     val tags by vm.tags.collectAsState()
     val effects by vm.effects.collectAsState()
     val hiddenAlbums by vm.hiddenAlbums.collectAsState()
-    val items = remember(page, lib, settings, trashed, hidden, tags, effects) { vm.pageItems(page, lib, settings, trashed, hidden, tags, effects) }
+    val mine by vm.repo.albums.albums.collectAsState()
+    val items = remember(page, lib, settings, trashed, hidden, tags, effects, mine) { vm.pageItems(page, lib, settings, trashed, hidden, tags, effects) }
     val locked = page.locked && settings.lockAlbums && page !in vm.unlocked
     var selecting by remember(page) { mutableStateOf(false) }
     var selected by remember(page) { mutableStateOf<Set<Long>>(emptySet()) }
@@ -99,6 +101,7 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
     }
     val overlays = com.galeria.app.ui.components.LocalOverlays.current
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val more = com.galeria.app.ui.root.rememberMoreActions(vm, actions)
 
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -123,10 +126,17 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
                     },
                     onToggle = { m -> selected = if (m.id in selected) selected - m.id else selected + m.id },
                     onLongPress = { m -> selecting = true; selected = selected + m.id },
+                    onSelectionChange = if (page == Page.Deleted || page == Page.Hidden) null else ({ ids -> selected = ids }),
                     daysLeft = if (page == Page.Deleted) ({ m -> daysLeft(m) }) else null,
                     header = {
                         Column {
                             PageHeader(title, page, items)
+                            if (page == Page.Duplicates) {
+                                val extras = remember(items) { vm.duplicateExtras(items) }
+                                if (extras.isNotEmpty()) MergeRow(extras.size) {
+                                    actions.confirmDelete(extras) { selecting = false; selected = emptySet() }
+                                }
+                            }
                             if (page == Page.Hidden && hiddenAlbums.isNotEmpty()) HiddenAlbumsRow(hiddenAlbums, onOpen = { a ->
                                 vm.unlocked = vm.unlocked + Page.Hidden
                                 vm.push(Page.Bucket(a.id, a.name, fromHidden = true))
@@ -176,6 +186,9 @@ fun PageScreen(vm: AppViewModel, page: Page, actions: Actions, handle: GridHandl
                         backdrop, chosen,
                         onShare = { bridge.share(chosen) },
                         onDelete = { actions.confirmDelete(chosen) { selecting = false; selected = emptySet() } },
+                        onMore = { r ->
+                            overlays.menu(r, more.selectionMenu(chosen, (page as? Page.UserAlbum)?.id) { selecting = false; selected = emptySet() })
+                        },
                     )
                 }
             }
@@ -238,6 +251,7 @@ fun daysLeft(m: Media): Int {
 @Composable
 fun pageTitle(page: Page): String = when (page) {
     is Page.Bucket -> page.name
+    is Page.UserAlbum -> page.name
     Page.Favourites -> stringResource(R.string.favourites)
     Page.Videos -> stringResource(R.string.videos)
     Page.Screenshots -> stringResource(R.string.screenshots)
@@ -290,5 +304,27 @@ private fun HiddenAlbumsRow(albums: List<com.galeria.app.ui.root.Album>, onOpen:
                 Box(Modifier.width(132.dp)) { AlbumCard(a, onOpen = { onOpen(a) }, onMenu = { r -> onMenu(a, r) }) }
             }
         }
+    }
+}
+
+
+/** Duplicates: keep the best copy of each photo, move the rest to Recently Deleted (iOS "Merge"). */
+@Composable
+private fun MergeRow(count: Int, onMerge: () -> Unit) {
+    val p = LocalPalette.current
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.merge_msg), style = Type.footnote, color = p.secondaryLabel, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        Box(
+            Modifier
+                .height(36.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
+                .background(p.blue)
+                .pressable(onClick = onMerge)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(plural(R.plurals.merge_count, count), style = Type.subheadSemibold, color = androidx.compose.ui.graphics.Color.White) }
     }
 }

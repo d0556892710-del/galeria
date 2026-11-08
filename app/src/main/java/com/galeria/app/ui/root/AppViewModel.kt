@@ -29,11 +29,16 @@ import kotlinx.coroutines.launch
 enum class Tab { Library, Collections }
 enum class Zoom { Years, Months, All }
 
-data class Album(val id: Long, val name: String, val count: Int, val cover: Media, val latest: Long)
+data class Album(val id: Long, val name: String, val count: Int, val cover: Media?, val latest: Long, val user: Boolean = false) {
+    /** Unique across folder albums and your own albums. */
+    val key: String get() = (if (user) "u" else "b") + id
+    val page: Page get() = if (user) Page.UserAlbum(id, name) else Page.Bucket(id, name)
+}
 
 /** A screen pushed on top of the tabs (album, utility, media type). */
 sealed class Page(val locked: Boolean = false) {
     data class Bucket(val id: Long, val name: String, val fromHidden: Boolean = false) : Page()
+    data class UserAlbum(val id: Long, val name: String) : Page()
     data object Favourites : Page()
     data object Videos : Page()
     data object Screenshots : Page()
@@ -142,8 +147,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }.sortedWith(compareByDescending<Album> { it.name.equals("Camera", true) }.thenByDescending { it.latest })
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val albums: StateFlow<List<Album>> = combine(allAlbums, settings) { a, s -> a.filter { it.id !in s.hiddenAlbums } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** Your own albums (newest first), then the device's folders, like iOS. */
+    val albums: StateFlow<List<Album>> = combine(allAlbums, settings, repo.albums.albums, visible) { a, s, mine, lib ->
+        val byId = lib.associateBy { it.id }
+        val own = mine.map { ua ->
+            val items = ua.items.mapNotNull { byId[it] }
+            val latest = items.maxByOrNull { it.dateTaken }
+            Album(ua.id, ua.name, items.size, latest, latest?.dateTaken ?: ua.created, user = true)
+        }
+        own + a.filter { it.id !in s.hiddenAlbums }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** A photo to scroll to in Library (Show in All Photos). */
+    var reveal by mutableStateOf<Long?>(null)
+
+    fun createAlbum(name: String, ids: List<Long> = emptyList()) = repo.albums.create(name, ids)
+    fun addToAlbum(albumId: Long, ids: List<Long>) = repo.albums.add(albumId, ids)
+    fun removeFromAlbum(albumId: Long, ids: Collection<Long>) = repo.albums.remove(albumId, ids)
+    fun renameAlbum(albumId: Long, name: String) = repo.albums.rename(albumId, name)
+    fun deleteAlbum(albumId: Long) = repo.albums.delete(albumId)
     val hiddenAlbums: StateFlow<List<Album>> = combine(allAlbums, settings) { a, s -> a.filter { it.id in s.hiddenAlbums } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -217,6 +239,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun rawItems(p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>, tags: MediaTags, effects: Map<Long, LiveEffect>): List<Media> = when (p) {
         is Page.Bucket -> lib.filter { it.bucketId == p.id }
+        is Page.UserAlbum -> {
+            val ids = repo.albums.albums.value.firstOrNull { it.id == p.id }?.items?.toHashSet() ?: emptySet()
+            lib.filter { it.id in ids }
+        }
         Page.LivePhotos -> lib.filter { it.id in tags.live }
         Page.Portrait -> lib.filter { it.id in tags.portrait }
         Page.SlowMo -> lib.filter { it.isSlowMo }
@@ -246,6 +272,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         Page.Deleted -> trashed.sortedBy { it.expiresAt }
         Page.Settings -> emptyList()
     }
+
+    /** In each group of identical photos, everything except the best copy (largest, favourite, oldest). */
+    fun duplicateExtras(items: List<Media>): List<Media> =
+        items.filter { it.size > 0 }.groupBy { Triple(it.size, it.width, it.height) }.values.filter { it.size > 1 }.flatMap { g ->
+            val keep = g.maxWithOrNull(compareBy<Media> { it.width.toLong() * it.height }.thenBy { it.isFavorite }.thenByDescending { it.dateTaken })
+            g.filter { it !== keep }
+        }
 
     fun duplicates(lib: List<Media>): List<Media> =
         lib.filter { it.size > 0 }.groupBy { Triple(it.size, it.width, it.height) }.values.filter { it.size > 1 }.flatten()

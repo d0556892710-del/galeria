@@ -1,10 +1,12 @@
 package com.galeria.app.ui.library
 
+import kotlin.math.abs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
@@ -124,6 +126,8 @@ fun PhotoGrid(
     modifier: Modifier = Modifier,
     /** Month labels need the grid to be in capture-date order. */
     monthLabels: Boolean = true,
+    /** Enables iPhone drag-to-select (swipe sideways across photos while selecting). */
+    onSelectionChange: ((Set<Long>) -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     val fmt = rememberFmt()
@@ -160,6 +164,20 @@ fun PhotoGrid(
     val openCb by rememberUpdatedState(onOpen)
     val toggleCb by rememberUpdatedState(onToggle)
     val longCb by rememberUpdatedState(onLongPress)
+    val selectedNow by rememberUpdatedState(selected)
+    val selectCb by rememberUpdatedState(onSelectionChange)
+    fun hitIndex(pos: Offset): Int? {
+        val hc = handle.headerCount
+        val list = itemsNow
+        val layout = handle.state.layoutInfo
+        val y = pos.y + layout.viewportStartOffset
+        val info = layout.visibleItemsInfo.firstOrNull { li ->
+            li.index >= hc && li.index < hc + list.size &&
+                pos.x >= li.offset.x && pos.x < li.offset.x + li.size.width &&
+                y >= li.offset.y && y < li.offset.y + li.size.height
+        } ?: return null
+        return info.index - hc
+    }
     fun hit(pos: Offset): Media? {
         val hc = handle.headerCount
         val list = itemsNow
@@ -249,6 +267,67 @@ fun PhotoGrid(
                 .fillMaxSize()
                 .graphicsLayer {
                     scaleX = pinchScale; scaleY = pinchScale; transformOrigin = pinchOrigin
+                }
+                .pointerInput(handle, selecting) {
+                    if (!selecting) return@pointerInput
+                    // Drag-to-select: a sideways swipe claims the gesture (vertical swipes still scroll).
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        val startIdx = hitIndex(down.position) ?: return@awaitEachGesture
+                        val list0 = itemsNow
+                        val startId = list0.getOrNull(startIdx)?.id ?: return@awaitEachGesture
+                        var claimed = false
+                        var total = Offset.Zero
+                        var last = down.position
+                        val base = selectedNow
+                        val adding = startId !in base
+                        var auto: kotlinx.coroutines.Job? = null
+                        fun apply(pos: Offset) {
+                            val list = itemsNow
+                            val i = hitIndex(pos) ?: return
+                            val a = minOf(startIdx, i).coerceIn(0, list.size - 1)
+                            val b = maxOf(startIdx, i).coerceIn(0, list.size - 1)
+                            val range = HashSet<Long>(b - a + 1)
+                            for (k in a..b) range += list[k].id
+                            selectCb?.invoke(if (adding) base + range else base - range)
+                        }
+                        while (true) {
+                            val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                            if (ev.changes.size > 1) break
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!ch.pressed) break
+                            last = ch.position
+                            if (!claimed) {
+                                total += ch.position - ch.previousPosition
+                                if (total.getDistance() > viewConfiguration.touchSlop) {
+                                    if (abs(total.x) > abs(total.y) * 1.15f && selectCb != null) {
+                                        claimed = true
+                                        apply(last)
+                                        // Near the top or bottom edge the grid scrolls by itself.
+                                        auto = gridScope.launch {
+                                            val edge = 70.dp.toPx()
+                                            val topEdge = topPadding.toPx(); val bottomEdge = size.height - bottomPadding.toPx()
+                                            while (true) {
+                                                val y = last.y
+                                                val speed = when {
+                                                    y < topEdge + edge -> -((topEdge + edge - y) / edge).coerceIn(.2f, 1.6f) * 22f
+                                                    y > bottomEdge - edge -> ((y - (bottomEdge - edge)) / edge).coerceIn(.2f, 1.6f) * 22f
+                                                    else -> 0f
+                                                }
+                                                if (speed != 0f) { handle.state.scrollBy(speed); apply(last) }
+                                                kotlinx.coroutines.delay(16)
+                                            }
+                                        }
+                                    } else break
+                                }
+                            }
+                            if (claimed) {
+                                ch.consume()
+                                apply(last)
+                            }
+                        }
+                        auto?.cancel()
+                    }
                 }
                 .pointerInput(handle) {
                     detectTapGestures(

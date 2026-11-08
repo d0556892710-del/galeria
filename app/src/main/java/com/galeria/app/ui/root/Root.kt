@@ -129,7 +129,11 @@ fun PhotosRoot(vm: AppViewModel) {
                 // Composed only while something is open, so it is registered last and always wins:
                 // the phone's Back closes the menu / sheet first, never the screen under it.
                 if (overlays.anyOpen) BackHandler {
-                    if (overlays.sheet != null) overlays.closeSheet() else overlays.closeMenus()
+                    when {
+                        overlays.prompt != null -> overlays.closePrompt()
+                        overlays.sheet != null -> overlays.closeSheet()
+                        else -> overlays.closeMenus()
+                    }
                 }
             }
         }
@@ -147,6 +151,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     val fmt = rememberFmt()
     val scope = rememberCoroutineScope()
     val actions = remember(vm, bridge, overlays, ctx) { Actions(vm, bridge, overlays, ctx.resources, scope, ctx) }
+    val more = rememberMoreActions(vm, actions)
     val backdrop = rememberBackdrop()
     DisposableEffect(backdrop) {
         backdrops.list.add(0, backdrop)
@@ -281,6 +286,13 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
         androidx.compose.runtime.snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }.collect { backdrop.invalidate() }
     }
 
+    // Show in All Photos: scroll Library to that photo.
+    LaunchedEffect(vm.reveal, items) {
+        val id = vm.reveal ?: return@LaunchedEffect
+        val i = items.indexOfFirst { it.id == id }
+        if (i >= 0) { gridState.requestScrollToItem(i); vm.reveal = null }
+    }
+
     // A crash last time: offer the report so it can be sent and fixed.
     LaunchedEffect(Unit) {
         val f = java.io.File(ctx.filesDir, com.galeria.app.CRASH_FILE)
@@ -366,6 +378,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                                 items = items,
                                 handle = handle,
                                 columns = columns,
+                                onSelectionChange = { vm.selected = it },
                                 monthLabels = settings.sort == SortMode.Captured,
                                 aspect = settings.aspectGrid,
                                 topPadding = topPad,
@@ -528,8 +541,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                 backdrop, selectedItems,
                 onShare = { bridge.share(selectedItems) },
                 onDelete = { actions.confirmDelete(selectedItems) { vm.endSelect() } },
-                extraLabel = stringResource(R.string.hide),
-                onExtra = { actions.hide(selectedItems) { vm.endSelect() } },
+                onMore = { r -> overlays.menu(r, more.selectionMenu(selectedItems, null) { vm.endSelect() }) },
             )
         }
 
@@ -587,14 +599,28 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     }
 }
 
-/** Long-press menu of an album: pin, hide. */
+/** Long-press menu of an album: pin; rename / delete for your own albums; hide for folders. */
 fun albumMenu(vm: AppViewModel, ctx: android.content.Context, overlays: com.galeria.app.ui.components.Overlays, a: Album, s: AppSettings): MenuSpec {
     val key = "album:${a.id}"
     val pinned = key in s.pinned
-    return MenuSpec(title = a.name, groups = listOf(
-        listOf(MenuItem(ctx.getString(if (pinned) R.string.unpin else R.string.pin), Sym.pin) {
-            vm.setPinned(if (pinned) s.pinned - key else s.pinned + key)
+    val pin = MenuItem(ctx.getString(if (pinned) R.string.unpin else R.string.pin), Sym.pin) {
+        vm.setPinned(if (pinned) s.pinned - key else s.pinned + key)
+    }
+    if (a.user) return MenuSpec(title = a.name, groups = listOf(
+        listOf(pin, MenuItem(ctx.getString(R.string.rename), Sym.sliders) {
+            overlays.prompt(com.galeria.app.ui.components.PromptSpec(
+                title = ctx.getString(R.string.rename_album), initial = a.name, placeholder = ctx.getString(R.string.album_name), confirm = ctx.getString(R.string.save),
+            ) { name -> vm.renameAlbum(a.id, name) })
         }),
+        listOf(MenuItem(ctx.getString(R.string.delete_album), Sym.trash, destructive = true) {
+            overlays.sheet(SheetSpec(ctx.getString(R.string.delete_album_msg), listOf(SheetAction(ctx.getString(R.string.delete_album), destructive = true) {
+                vm.deleteAlbum(a.id)
+                if (pinned) vm.setPinned(s.pinned - key)
+            })))
+        }),
+    ))
+    return MenuSpec(title = a.name, groups = listOf(
+        listOf(pin),
         listOf(MenuItem(ctx.getString(R.string.hide_album), Sym.eyeSlash, destructive = true) {
             overlays.sheet(SheetSpec(ctx.getString(R.string.hide_album_msg), listOf(SheetAction(ctx.getString(R.string.hide_album), destructive = true) {
                 vm.setAlbumHidden(a.id, true)
