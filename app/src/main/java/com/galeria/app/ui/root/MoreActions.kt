@@ -127,6 +127,19 @@ class MoreActions(
 
     // ------------------------------------------------------------------ location
 
+    /** "Use as Wallpaper": one tap sets it, nothing to adjust. */
+    fun wallpaperMenu(m: Media): MenuSpec {
+        fun set(which: Int) = scope.launch {
+            val ok = com.galeria.app.data.Wallpaper.set(context, m, which)
+            overlays.toast(s(if (ok) R.string.wallpaper_set else R.string.wallpaper_failed))
+        }
+        return MenuSpec(title = s(R.string.use_as_wallpaper), groups = listOf(listOf(
+            MenuItem(s(R.string.wall_home), Sym.wallpaper) { set(com.galeria.app.data.Wallpaper.HOME) },
+            MenuItem(s(R.string.wall_lock), Sym.lock) { set(com.galeria.app.data.Wallpaper.LOCK) },
+            MenuItem(s(R.string.wall_both), Sym.wallpaper) { set(com.galeria.app.data.Wallpaper.BOTH) },
+        )))
+    }
+
     fun locationMenu(items: List<Media>, after: () -> Unit = {}): MenuSpec {
         val single = items.singleOrNull()
         val group = buildList {

@@ -12,8 +12,8 @@ android {
         applicationId = "com.galeria.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 10
-        versionName = "3.7"
+        versionCode = 11
+        versionName = "3.8"
         // Every phone in use today is 64-bit ARM; leaving out the other chips keeps the app small.
         // (-Pabi=x86_64 builds a copy for the virtual phone used by the automatic test.)
         ndk { abiFilters += ((project.findProperty("abi") as String?) ?: "arm64-v8a") }
@@ -87,7 +87,6 @@ dependencies {
     // On-device vision (bundled models, works offline): content search, Live Text, faces.
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation(libs.androidx.exifinterface)
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

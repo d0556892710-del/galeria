@@ -40,10 +40,8 @@ data class Album(val id: Long, val name: String, val count: Int, val cover: Medi
 sealed class Page(val locked: Boolean = false) {
     data class Bucket(val id: Long, val name: String, val fromHidden: Boolean = false) : Page()
     data class UserAlbum(val id: Long, val name: String) : Page()
-    data class Person(val id: Long, val name: String) : Page()
     data class Memory(val id: String, val title: String) : Page()
     data object MemoriesList : Page()
-    data object PeopleList : Page()
     data object Favourites : Page()
     data object Videos : Page()
     data object Screenshots : Page()
@@ -73,7 +71,7 @@ sealed class Page(val locked: Boolean = false) {
     data object RecentlyEdited : Page()
 
     /** Pages that show a list of collections rather than a photo grid. */
-    val isList: Boolean get() = this == AllAlbums || this == MediaTypesList || this == UtilitiesList || this == PinnedList || this == MemoriesList || this == PeopleList
+    val isList: Boolean get() = this == AllAlbums || this == MediaTypesList || this == UtilitiesList || this == PinnedList || this == MemoriesList
 }
 
 enum class ViewerCtx { Library, Page, Search, External, Hidden }
@@ -163,13 +161,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         own + a.filter { it.id !in s.hiddenAlbums }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val people: StateFlow<List<com.galeria.app.data.PersonInfo>> = repo.faces.people
-
     /** Memories and Featured Photos, rebuilt as the phone understands more photos. */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    val memories: StateFlow<List<com.galeria.app.data.Memory>> = combine(visible, repo.smart.index, repo.faces.people) { lib, smart, ppl -> Triple(lib, smart, ppl) }
+    val memories: StateFlow<List<com.galeria.app.data.Memory>> = combine(visible, repo.smart.index) { lib, smart -> lib to smart }
         .debounce(1200)
-        .map { (lib, smart, ppl) -> runCatching { com.galeria.app.data.Memories.build(lib, smart, ppl, getApplication<Application>().resources, java.util.Locale.getDefault()) }.getOrDefault(emptyList()) }
+        .map { (lib, smart) -> runCatching { com.galeria.app.data.Memories.build(lib, smart, getApplication<Application>().resources, java.util.Locale.getDefault()) }.getOrDefault(emptyList()) }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** The Memory playing as a movie. */
@@ -256,12 +252,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun rawItems(p: Page, lib: List<Media>, s: AppSettings, trashed: List<Media>, hidden: List<Media>, tags: MediaTags, effects: Map<Long, LiveEffect>): List<Media> = when (p) {
         is Page.Bucket -> lib.filter { it.bucketId == p.id }
-        is Page.Person -> {
-            val ids = repo.faces.people.value.firstOrNull { it.id == p.id }?.mediaIds ?: emptySet()
-            lib.filter { it.id in ids }
-        }
         is Page.Memory -> memories.value.firstOrNull { it.id == p.id }?.items.orEmpty()
-        Page.MemoriesList, Page.PeopleList -> emptyList()
+        Page.MemoriesList -> emptyList()
         is Page.UserAlbum -> {
             val ids = repo.albums.albums.value.firstOrNull { it.id == p.id }?.items?.toHashSet() ?: emptySet()
             lib.filter { it.id in ids }

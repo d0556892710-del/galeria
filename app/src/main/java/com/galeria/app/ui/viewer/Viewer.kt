@@ -485,7 +485,7 @@ private fun moreMenu(
     }
     val second = buildList {
         add(MenuItem(s(R.string.slideshow), Sym.playRectangle) { startSlideshow() })
-        if (!m.isVideo) add(MenuItem(s(R.string.use_as_wallpaper), Sym.wallpaper) { bridge.setWallpaper(m) })
+        if (!m.isVideo) add(MenuItem(s(R.string.use_as_wallpaper), Sym.wallpaper, submenu = { more.wallpaperMenu(m) }))
     }
     val info = buildList {
         if (library) {

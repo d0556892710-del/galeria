@@ -48,7 +48,7 @@
     <string name="hide">הסתר</string>
     <string name="unhide">בטל הסתרה</string>
     <string name="slideshow">מצגת</string>
-    <string name="use_as_wallpaper">השתמש כטפט</string>
+    <string name="use_as_wallpaper">הגדר כרקע</string>
     <string name="copied">הועתק</string>
     <string name="duplicated">שוכפל</string>
     <string name="moved_to_hidden">הועבר אל ״מוסתרים״</string>
@@ -328,11 +328,8 @@
     <string name="copy_all">העתק הכול</string>
     <string name="close">סגור</string>
     <string name="memories">זיכרונות</string>
-    <string name="people">אנשים</string>
-    <string name="person">אדם</string>
     <string name="featured_photos">תמונות נבחרות</string>
     <string name="on_this_day">ביום זה</string>
-    <string name="mem_with">עם %1$s</string>
     <string name="mem_pets">חברים על ארבע</string>
     <string name="mem_food">ארוחות טובות</string>
     <string name="mem_beach">ימים בחוף</string>
@@ -340,10 +337,9 @@
     <string name="mem_nights">לילות בחוץ</string>
     <string name="mem_year">הרגעים של %1$d</string>
     <string name="play_memory">הפעל זיכרון</string>
-    <string name="add_name">הוסף שם</string>
-    <string name="name_person">מי זה?</string>
-    <string name="name_hint">שם</string>
-    <string name="merge_with">מזג עם…</string>
-    <string name="not_this_person">לא האדם הזה</string>
-    <string name="hide_person">הסתר אדם</string>
+    <string name="wall_home">מסך הבית</string>
+    <string name="wall_lock">מסך הנעילה</string>
+    <string name="wall_both">מסך הבית ומסך הנעילה</string>
+    <string name="wallpaper_set">הרקע הוגדר</string>
+    <string name="wallpaper_failed">לא ניתן להגדיר את הרקע</string>
 </resources>

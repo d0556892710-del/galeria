@@ -77,7 +77,6 @@ fun CollectionsScreen(
 ) {
     val p = LocalPalette.current
     val memories by vm.memories.collectAsState()
-    val people by vm.people.collectAsState()
     val pinnable = pinnableEntries(vm, library, albums, tags, effects, settings)
     val pinned = settings.pinned.mapNotNull { pinnable[it] }
     val types = mediaTypeEntries(library, tags, effects)
@@ -106,13 +105,6 @@ fun CollectionsScreen(
             Section("memories", stringResource(R.string.memories), collapsed, onToggle, onTitle = { onOpen(Page.MemoriesList) }) {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(memories, key = { it.id }) { mem -> MemoryCard(mem) { onOpen(Page.Memory(mem.id, mem.title)) } }
-                }
-            }
-        }
-        if (people.isNotEmpty()) item(key = "people") {
-            Section("people", stringResource(R.string.people), collapsed, onToggle, onTitle = { onOpen(Page.PeopleList) }) {
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    items(people, key = { it.id }) { pp -> PersonBubble(pp) { onOpen(Page.Person(pp.id, pp.name)) } }
                 }
             }
         }
