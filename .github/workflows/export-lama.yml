@@ -1,0 +1,36 @@
+name: Export LaMa (high resolution)
+# Exports big-lama to ONNX at fixed 768 and 1024 px (the public ONNX is 512 only), checks it against PyTorch.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/export-lama.yml'
+      - '.github/export_lama.py'
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: |
+          python3 -m pip install --quiet torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install --quiet onnx==1.16.2 onnxruntime==1.19.2 numpy==1.26.4
+      - name: Download big-lama
+        run: |
+          curl -fL --retry 4 -o big-lama.pt https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt
+          ls -la big-lama.pt
+      - name: Export
+        run: python3 .github/export_lama.py
+      - name: Publish
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la *.onnx || true
+          if ls lama_*.onnx >/dev/null 2>&1; then
+            gh release delete models-lama-hr --yes --cleanup-tag || true
+            gh release create models-lama-hr lama_*.onnx --draft --title "LaMa high resolution" --notes "Exported by CI from big-lama."
+          fi
