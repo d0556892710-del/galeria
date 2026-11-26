@@ -1,3 +1,4 @@
 # name url
 lama_fp32.onnx https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx
 migan_pipeline_v2.onnx https://huggingface.co/andraniksargsyan/migan/resolve/main/migan_pipeline_v2.onnx
+sam21_base_plus.zip https://huggingface.co/vietanhdev/segment-anything-2.1-onnx-models/resolve/main/sam2.1_hiera_base_plus_20260221.zip
