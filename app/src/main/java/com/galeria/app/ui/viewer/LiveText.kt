@@ -45,10 +45,26 @@ object LiveTextEngine {
         }
         val w = bmp.width.toFloat(); val h = bmp.height.toFloat()
         val res = Tasks.await(reader.process(InputImage.fromBitmap(bmp, 0)))
+        val t0 = System.currentTimeMillis()
+        val ocr = com.galeria.app.data.HebrewOcr.available(context)
+        var hebrew = 0
         val boxes = res.textBlocks.mapNotNull { b ->
             val r = b.boundingBox ?: return@mapNotNull null
-            if (b.text.isBlank()) null else TextBox(b.text, r.left / w, r.top / h, r.right / w, r.bottom / h)
+            if (b.text.isBlank()) return@mapNotNull null
+            // Google's reader only knows Latin letters: each block is also read for Hebrew (within a time budget).
+            var text = b.text
+            if (ocr && System.currentTimeMillis() - t0 < 9000) runCatching {
+                val pad = (r.height() * .12f).toInt() + 4
+                val x0 = (r.left - pad).coerceIn(0, bmp.width - 1); val y0 = (r.top - pad).coerceIn(0, bmp.height - 1)
+                val x1 = (r.right + pad).coerceIn(x0 + 1, bmp.width); val y1 = (r.bottom + pad).coerceIn(y0 + 1, bmp.height)
+                val crop = android.graphics.Bitmap.createBitmap(bmp, x0, y0, x1 - x0, y1 - y0)
+                val heb = com.galeria.app.data.HebrewOcr.read(context, crop)
+                if (crop !== bmp) crop.recycle()
+                if (com.galeria.app.data.HebrewOcr.hebrewShare(heb) >= .3f && heb.count { it in '\u05D0'..'\u05EA' } >= 2) { text = heb; hebrew++ }
+            }.onFailure { android.util.Log.w("Photos", "hebrew ocr", it) }
+            TextBox(text, r.left / w, r.top / h, r.right / w, r.bottom / h)
         }
+        android.util.Log.i("PhotosPerf", "livetext blocks=${boxes.size} hebrew=$hebrew ms=${System.currentTimeMillis() - t0}")
         bmp.recycle()
         cache.put(key, boxes)
         boxes

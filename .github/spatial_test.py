@@ -72,7 +72,8 @@ for name, expect in [("astronaut", True), ("coffee", True), ("brick", False)]:
         time.sleep(1)
         adb("pull", f"/sdcard/{name}_sweep.mp4", f"{OUT}/{name}_sweep.mp4")
         if os.path.exists(f"{OUT}/{name}_sweep.mp4"):
-            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", f"{OUT}/{name}_sweep.mp4", "-vf", "fps=4,scale=540:-1", f"{OUT}/{name}_f%02d.png"])
+            try: subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", f"{OUT}/{name}_sweep.mp4", "-vf", "fps=4,scale=540:-1", f"{OUT}/{name}_f%02d.png"], timeout=120)
+            except Exception as e: print("   ffmpeg failed:", e, flush=True)
             try:
                 from PIL import Image
                 import numpy as np
@@ -106,6 +107,28 @@ print("  ", line or "NO REFINE", flush=True)
 time.sleep(1); shot("lift_2_refined")
 if tap("Copy"): time.sleep(1); shot("lift_3_copied")
 sh("input keyevent 4"); time.sleep(1.5)
+
+# ---- Hebrew Live Text: the text is read in Hebrew, copied, and pasted into Search to check it ----
+print("== hebrew live text", flush=True)
+adb("logcat", "-c"); open_photo(media_id("hebrew")); time.sleep(3)
+line = wait_for(r"livetext blocks=\d+ hebrew=\d+ ms=\d+", 90)
+print("  ", line or "NO LIVE TEXT", flush=True)
+if not line or re.search(r"hebrew=0\b", line): ok = False
+if tap("Live Text"):
+    time.sleep(1); shot("hebrew_1_livetext")
+    W, H = [int(v) for v in re.search(r"(\d+)x(\d+)", sh("wm size")).groups()]
+    ph = W * 900 / 1400; top = (H - ph) / 2
+    sh(f"input tap {W // 2} {int(top + ph * 290 / 900)}"); time.sleep(1.5); shot("hebrew_2_copied")
+    sh(f"am force-stop {PKG}"); time.sleep(1)
+    sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1"); time.sleep(6)
+    tap("Cancel")
+    if tap("Search"):
+        time.sleep(1.5); sh("input keyevent 279"); time.sleep(2); shot("hebrew_3_pasted")
+        texts = [t for t, d, b in nodes() if t]
+        pasted = next((t for t in texts if any("\u05D0" <= c <= "\u05EA" for c in t)), "")
+        print("   pasted:", pasted, flush=True)
+        if "שלום" not in pasted: ok = False
+        sh("input keyevent 4"); time.sleep(1)
 
 # ---- Portrait on any photo: the astronaut gets the Portrait tab; the blur appears when switched on ----
 print("== portrait", flush=True)

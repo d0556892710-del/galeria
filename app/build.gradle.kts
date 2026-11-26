@@ -95,6 +95,8 @@ dependencies {
     implementation("com.google.mlkit:translate:17.0.3")
     // Subject lift (touch and hold): Google's subject model, through Play services.
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
+    // Hebrew Live Text: Tesseract (Apache-2.0) with its best Hebrew and English models.
+    implementation("cz.adaptech.tesseract4android:tesseract4android-openmp:4.9.0")
     implementation(libs.androidx.exifinterface)
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

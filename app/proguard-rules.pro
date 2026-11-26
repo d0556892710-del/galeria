@@ -16,3 +16,7 @@
 # ONNX Runtime (JNI)
 -keep class ai.onnxruntime.** { *; }
 -dontwarn ai.onnxruntime.**
+
+# Tesseract (JNI calls back into these classes)
+-keep class com.googlecode.tesseract.android.** { *; }
+-keep class com.googlecode.leptonica.android.** { *; }

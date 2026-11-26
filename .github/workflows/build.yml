@@ -57,7 +57,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p app/src/main/assets/models
-          gh release download ai-models -p '*.onnx' -p '*.json' -D app/src/main/assets/models --clobber || echo "models not available: Clean Up falls back to the classic fill"
+          gh release download ai-models -p '*.onnx' -p '*.json' -p '*.traineddata' -D app/src/main/assets/models --clobber || echo "models not available: Clean Up falls back to the classic fill"
           ls -la app/src/main/assets/models
 
       - name: Build release APK
@@ -260,7 +260,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p app/src/main/assets/models
-          gh release download ai-models -p '*.onnx' -p '*.json' -D app/src/main/assets/models --clobber
+          gh release download ai-models -p '*.onnx' -p '*.json' -p '*.traineddata' -D app/src/main/assets/models --clobber
           ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
           mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
           ls -la apk
@@ -332,14 +332,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p app/src/main/assets/models
-          gh release download ai-models -p '*.onnx' -p '*.json' -D app/src/main/assets/models --clobber
+          gh release download ai-models -p '*.onnx' -p '*.json' -p '*.traineddata' -D app/src/main/assets/models --clobber
           ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
           mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
           ls -la apk
       - name: Test photo
         run: |
+          (command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)) >/dev/null 2>&1 || true
           python3 -m pip install --quiet scikit-image pillow numpy
           python3 -c "from skimage import data; from PIL import Image; [Image.fromarray(getattr(data, n)()).convert('RGB').save(n + '.jpg', quality=95) for n in ('coffee', 'astronaut', 'brick')]"
+          # A photo with Hebrew text (drawn right to left by hand: Pillow here has no bidi).
+          python3 -c "
+          from PIL import Image, ImageDraw, ImageFont
+          im = Image.new('RGB', (1400, 900), (250, 248, 240)); d = ImageDraw.Draw(im)
+          f = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 110)
+          for i, line in enumerate(['שלום עולם', 'קפה הפוך']):
+              t = line[::-1]; w = d.textlength(t, font=f); d.text(((1400 - w) / 2, 220 + i * 260), t, fill=(20, 20, 20), font=f)
+          im.save('hebrew.jpg', quality=95)"
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

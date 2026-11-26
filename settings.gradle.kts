@@ -10,6 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Tesseract for Android (Hebrew Live Text).
+        maven { url = uri("https://jitpack.io") }
     }
 }
 rootProject.name = "Galeria"
