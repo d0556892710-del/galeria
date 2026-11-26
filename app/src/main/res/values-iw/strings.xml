@@ -347,4 +347,5 @@
     <string name="spatial_scene">סצנה מרחבית</string>
     <string name="tab_portrait">פורטרט</string>
     <string name="depth">עומק</string>
+    <string name="share_ellipsis">שיתוף…</string>
 </resources>

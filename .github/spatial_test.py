@@ -60,17 +60,53 @@ for name, expect in [("astronaut", True), ("coffee", True), ("brick", False)]:
     print("   hexagon shown:", has, flush=True)
     if has != expect: ok = False
     if has:
+        # The opening sweep is recorded on video (screenshots are too slow to catch it).
+        rec = subprocess.Popen(["adb", "shell", f"screenrecord --time-limit 7 /sdcard/{name}_sweep.mp4"])
+        time.sleep(0.8)
         tap("Spatial Scene")
         t1 = time.time(); line = wait_for(r"spatial scene id=\d+ \d+x\d+ ms=\d+", 90)
         print("  ", line or "NO SCENE", f"after {time.time()-t1:.0f}s", flush=True)
         if not line: ok = False
-        # The opening sweep: a few frames to see it move.
-        for i in range(5): shot(f"{name}_2_sweep{i}"); time.sleep(0.3)
+        try: rec.wait(timeout=30)
+        except Exception: rec.kill()
+        time.sleep(1)
+        adb("pull", f"/sdcard/{name}_sweep.mp4", f"{OUT}/{name}_sweep.mp4")
+        if os.path.exists(f"{OUT}/{name}_sweep.mp4"):
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", f"{OUT}/{name}_sweep.mp4", "-vf", "fps=4,scale=540:-1", f"{OUT}/{name}_f%02d.png"])
+            try:
+                from PIL import Image
+                import numpy as np
+                fr = sorted(f for f in os.listdir(OUT) if f.startswith(f"{name}_f") and f.endswith(".png"))
+                arr = [np.asarray(Image.open(f"{OUT}/{f}").convert("L"), dtype=float) for f in fr]
+                h = arr[0].shape[0]
+                diffs = [round(float(np.abs(arr[i][h//4:3*h//4] - arr[i-1][h//4:3*h//4]).mean()), 2) for i in range(1, len(arr))]
+                print("   frame-to-frame motion:", diffs, flush=True)
+                if max(diffs[2:] or [0]) < 0.8: print("   WARNING: hardly any motion", flush=True)
+            except Exception as e: print("   motion check failed:", e, flush=True)
+        else: print("   no recording", flush=True)
         line = wait_for(r"spatial fill ok=\w+ ms=\d+", 150)
         print("  ", line or "NO FILL", flush=True)
         time.sleep(1); shot(f"{name}_3_filled")
         tap("Spatial Scene"); time.sleep(1); shot(f"{name}_4_off")
     sh("input keyevent 4"); time.sleep(2)
+# ---- Subject lift: touch and hold the astronaut; she lifts out with Copy / Share ----
+print("== lift", flush=True)
+adb("logcat", "-c"); open_photo(media_id("astronaut")); time.sleep(4)
+W, H = [int(v) for v in re.search(r"(\d+)x(\d+)", sh("wm size")).groups()]
+x, y = int(W * .42), int(H / 2 + W * .1)   # her suit, below the face (the photo is square, centred)
+sh(f"input swipe {x} {y} {x} {y} 1200")
+line = wait_for(r"lift quick found=\w+ ms=\d+", 120)
+print("  ", line or "NO LIFT", flush=True)
+time.sleep(1.5); shot("lift_1_lifted")
+has_menu = find("Copy") is not None
+print("   menu shown:", has_menu, flush=True)
+if not (line and "found=true" in line and has_menu): ok = False
+line = wait_for(r"lift refine ok=\w+ ms=\d+", 150)
+print("  ", line or "NO REFINE", flush=True)
+time.sleep(1); shot("lift_2_refined")
+if tap("Copy"): time.sleep(1); shot("lift_3_copied")
+sh("input keyevent 4"); time.sleep(1.5)
+
 # ---- Portrait on any photo: the astronaut gets the Portrait tab; the blur appears when switched on ----
 print("== portrait", flush=True)
 adb("logcat", "-c"); open_photo(media_id("astronaut")); time.sleep(4)

@@ -23,6 +23,9 @@ interface Bridge {
     fun setWallpaper(m: Media)
     fun copy(m: Media)
     fun copyText(text: String)
+    /** A picture the app made (a lifted subject): to the clipboard, or to another app. */
+    fun copyImage(file: java.io.File)
+    fun shareImage(file: java.io.File)
     fun shareText(text: String)
     fun openMaps(lat: Double, lon: Double)
     fun requestPermissions()

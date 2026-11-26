@@ -340,7 +340,52 @@ fun Viewer(
         android.util.Log.i("PhotosPerf", "spatial fill ok=${sharp != null} ms=${System.currentTimeMillis() - t0}")
         if (sharp != null && spatialId == id) spatialBg = sharp
     }
-    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.Depth.release() }.start() } }
+    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.Depth.release(); com.galeria.app.data.BiRef.release() }.start() } }
+
+    // Subject lift: touch and hold the subject; it lifts out with Copy and Share. Google's subject model
+    // finds it at once; BiRefNet then sharpens its outline in the background.
+    var lifted by remember { mutableStateOf<Pair<Long, com.galeria.app.data.Lift.Cutout>?>(null) }
+    var liftBusy by remember { mutableStateOf(false) }
+    var liftMenu by remember { mutableStateOf(false) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.galeria.app.data.Lift.prefetch(appCtx) } }
+    LaunchedEffect(cur?.id) { if (lifted != null) { lifted = null; if (liftMenu) overlays.closeMenus(); liftMenu = false } }
+    // The menu closing ends the lift.
+    LaunchedEffect(liftMenu) {
+        if (!liftMenu) return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { overlays.menus.isEmpty() }.collect { if (it) { liftMenu = false; lifted = null } }
+    }
+    fun lift(m: Media, nx: Float, ny: Float) {
+        if (liftBusy || m.isVideo) return
+        liftBusy = true
+        scope.launch {
+            val t0 = System.currentTimeMillis()
+            val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { SpatialStore.decode(appCtx, m, 2048) }
+            val r = photo?.let { b -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.galeria.app.data.Lift.quick(appCtx, b, nx, ny) } }
+            liftBusy = false
+            android.util.Log.i("PhotosPerf", "lift quick found=${r != null} ms=${System.currentTimeMillis() - t0}")
+            if (r == null || cur?.id != m.id) { photo?.recycle(); return@launch }
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            lifted = m.id to r.first
+            if (!r.first.sharp) {
+                val t1 = System.currentTimeMillis()
+                val sharp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.galeria.app.data.Lift.refine(appCtx, r.second) }
+                android.util.Log.i("PhotosPerf", "lift refine ok=${sharp != null} ms=${System.currentTimeMillis() - t1}")
+                if (sharp != null && lifted?.first == m.id) lifted = m.id to sharp
+            }
+        }
+    }
+    fun liftMenuAt(rect: Rect) {
+        if (liftMenu) return
+        liftMenu = true
+        fun file(): java.io.File? = lifted?.second?.let { com.galeria.app.data.Lift.save(appCtx, it) }
+        overlays.menu(rect, com.galeria.app.ui.components.MenuSpec(null, listOf(listOf(
+            com.galeria.app.ui.components.MenuItem(appCtx.getString(R.string.copy), Sym.docOnDoc) {
+                file()?.let { bridge.copyImage(it); overlays.toast(appCtx.getString(R.string.copied)) }
+            },
+            com.galeria.app.ui.components.MenuItem(appCtx.getString(R.string.share_ellipsis), Sym.share) { file()?.let { bridge.shareImage(it) } },
+        ))))
+    }
     val bg = if (!chrome || p.dark) Color.Black else Color.White
     // Over plain white (or black) there is nothing behind the glass to blur, so it would vanish;
     // like iPhone, it gets a soft grey body and a bit more shadow so the buttons always show.
@@ -386,6 +431,9 @@ fun Viewer(
                     motion = vm.repo.motion,
                     editParams = if (live) remember(m.id, m.dateModified) { com.galeria.app.ui.editor.EditParams.fromJson(vm.repo.edits.params(m.id)) } else null,
                     spatial = spatialScene?.takeIf { it.id == m.id },
+                    lifted = lifted?.takeIf { it.first == m.id }?.second,
+                    onLift = { nx, ny -> if (spatialScene?.id != m.id) lift(m, nx, ny) },
+                    onLiftPlaced = { liftMenuAt(it) },
                     spatialBg = spatialBg,
                     spatialAppear = { spatialAppear.value },
                     textBoxes = if (isCur && liveTextOn) textBoxes else null,
@@ -612,6 +660,9 @@ private fun MediaPage(
     motion: com.galeria.app.data.MotionStore,
     editParams: com.galeria.app.ui.editor.EditParams?,
     spatial: com.galeria.app.data.Spatial.Scene?,
+    lifted: com.galeria.app.data.Lift.Cutout?,
+    onLift: (Float, Float) -> Unit,
+    onLiftPlaced: (Rect) -> Unit,
     spatialBg: android.graphics.Bitmap?,
     spatialAppear: () -> Float,
     textBoxes: List<TextBox>?,
@@ -627,6 +678,8 @@ private fun MediaPage(
     val fit = if (boxSize != Size.Zero) fitRect(m, boxSize) else Rect.Zero
     val canPlayLive by androidx.compose.runtime.rememberUpdatedState(live && effect != com.galeria.app.data.LiveEffect.Off)
     val livePressCb by androidx.compose.runtime.rememberUpdatedState(onLivePress)
+    val fitNow by androidx.compose.runtime.rememberUpdatedState(fit)
+    val onLiftNow by androidx.compose.runtime.rememberUpdatedState(onLift)
     fun clamp() {
         val maxX = max(0f, (fit.width * zs.scale - boxSize.width) / 2f)
         val maxY = max(0f, (fit.height * zs.scale - boxSize.height) / 2f)
@@ -646,6 +699,14 @@ private fun MediaPage(
                         }
                     },
                     onTap = { onTap() },
+                    onLongPress = { pos ->
+                        // Touch and hold the subject to lift it (Live Photos play instead).
+                        val f = fitNow
+                        if (!m.isVideo && !canPlayLive && !zs.zoomed && f.width > 0f) {
+                            val nx = (pos.x - f.left) / f.width; val ny = (pos.y - f.top) / f.height
+                            if (nx in 0f..1f && ny in 0f..1f) onLiftNow(nx, ny)
+                        }
+                    },
                     onDoubleTap = { pos ->
                         scope.launch {
                             val startS = zs.scale; val startO = zs.offset
@@ -748,6 +809,7 @@ private fun MediaPage(
             }
             if (spatial != null && spatialBg != null && fit != Rect.Zero && android.os.Build.VERSION.SDK_INT >= 33) SpatialLayer(spatial, spatialBg, fit, spatialAppear)
             if (textBoxes != null && fit != Rect.Zero) LiveTextOverlay(textBoxes, fit, onCopyText)
+            if (lifted != null && fit != Rect.Zero) LiftLayer(lifted, fit, onLiftPlaced)
         }
     }
 }

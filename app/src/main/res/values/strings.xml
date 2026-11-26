@@ -340,4 +340,5 @@
     <string name="spatial_scene">Spatial Scene</string>
     <string name="tab_portrait">Portrait</string>
     <string name="depth">Depth</string>
+    <string name="share_ellipsis">Share…</string>
 </resources>

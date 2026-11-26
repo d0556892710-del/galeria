@@ -294,6 +294,7 @@ jobs:
           if ls cleanup_shots/*.png >/dev/null 2>&1; then
             gh release delete cleanup-shots --yes --cleanup-tag || true
             gh release create cleanup-shots cleanup_shots/*.png cleanup-result.txt --draft --title "Clean Up test" --notes "Built from ${GITHUB_SHA::7}"
+          fi
       - name: Verdict
         id: verdict
         if: always()
@@ -364,7 +365,7 @@ jobs:
           cat spatial-result.txt 2>/dev/null || true
           if ls spatial_shots/*.png >/dev/null 2>&1; then
             gh release delete spatial-shots --yes --cleanup-tag || true
-            gh release create spatial-shots spatial_shots/*.png spatial-result.txt --draft --title "Spatial test" --notes "Built from ${GITHUB_SHA::7}"
+            gh release create spatial-shots spatial_shots/*.png $(ls spatial_shots/*.mp4 2>/dev/null) spatial-result.txt --draft --title "Spatial test" --notes "Built from ${GITHUB_SHA::7}"
           fi
       - name: Verdict
         id: verdict

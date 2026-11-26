@@ -208,6 +208,19 @@ class MainActivity : AppCompatActivity(), Bridge {
         cm?.setPrimaryClip(ClipData.newUri(contentResolver, m.displayName.ifBlank { "Photo" }, shareUri(m)))
     }
 
+    override fun copyImage(file: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+        getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newUri(contentResolver, file.name, uri))
+    }
+
+    override fun shareImage(file: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+        val send = Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        send.clipData = ClipData.newUri(contentResolver, file.name, uri)
+        runCatching { startActivity(Intent.createChooser(send, null)) }
+    }
+
     override fun copyText(text: String) {
         getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Photos", text))
     }

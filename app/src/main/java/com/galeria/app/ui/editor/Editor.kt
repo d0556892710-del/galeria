@@ -846,7 +846,11 @@ internal fun PortraitPanel(params: EditParams, onParams: (EditParams) -> Unit) {
         Spacer(Modifier.height(14.dp))
         val f = stops[idx]
         val label = if (f % 1f == 0f) f.toInt().toString() else f.toString()
-        ToolLabel(stringResource(R.string.depth) + "  ƒ" + label, Modifier.graphicsLayer { alpha = if (on) 1f else .45f })
+        // "ƒ" stays lower-case (the label style capitalises everything else).
+        Row(Modifier.graphicsLayer { alpha = if (on) 1f else .45f }, verticalAlignment = Alignment.CenterVertically) {
+            ToolLabel(stringResource(R.string.depth))
+            Text("  ƒ$label", style = Type.caption1Semibold.copy(fontSize = 12.sp, letterSpacing = 1.sp), color = EditGrey)
+        }
         Spacer(Modifier.height(4.dp))
         // One tick per stop; ƒ1.4 on the left, ƒ16 on the right.
         Ruler(

@@ -86,12 +86,12 @@ private fun rememberTilt(active: Boolean): androidx.compose.runtime.State<Offset
                     val b = base ?: floatArrayOf(raw[0], raw[1]).also { base = it }
                     val k = 1f - exp(-dt / 2.5f)
                     b[0] += (raw[0] - b[0]) * k; b[1] += (raw[1] - b[1]) * k
-                    target = Offset(((raw[1] - b[1]) / .32f).coerceIn(-1f, 1f), ((raw[0] - b[0]) / .32f).coerceIn(-1f, 1f))
+                    target = Offset(((raw[1] - b[1]) / .26f).coerceIn(-1f, 1f), ((raw[0] - b[0]) / .26f).coerceIn(-1f, 1f))
                 }
                 // The opening: the scene sweeps round once, so it is clear it is in 3D.
-                if (t < 1.8f) {
-                    val a = sin(PI.toFloat() * t / 1.8f) * .75f
-                    val ang = 2f * PI.toFloat() * t / 1.8f
+                if (t < 2.4f) {
+                    val a = sin(PI.toFloat() * t / 2.4f) * .95f
+                    val ang = 2f * PI.toFloat() * t / 2.4f
                     target += Offset(cos(ang) * a, sin(ang) * a * .55f)
                 }
                 cur += (target - cur) * (1f - exp(-dt / .09f))
@@ -128,11 +128,11 @@ fun SpatialLayer(scene: Spatial.Scene, bg: Bitmap, fit: Rect, appear: () -> Floa
             if (r.bgSet !== bg) { r.bgShader.setInputShader("layer", com.galeria.app.data.Portrait.linear(bg)); r.bgSet = bg }
             val w = scene.fg.width.toFloat(); val h = scene.fg.height.toFloat()
             val k = appear()
-            // Up to 5 % of the width between nearest and farthest; slightly enlarged so no edge shows.
+            // Up to 6.5 % of the width between nearest and farthest; enlarged a little so no edge shows.
             val t = tilt.value * k
-            val sx = t.x * w * .05f; val sy = t.y * w * .05f
+            val sx = t.x * w * .065f; val sy = t.y * w * .065f
             r.fgShader.setFloatUniform("shift", sx, sy); r.bgShader.setFloatUniform("shift", sx, sy)
-            val zoom = 1f + .07f * k
+            val zoom = 1f + .08f * k
             drawIntoCanvas { c ->
                 val nc = c.nativeCanvas
                 nc.save()
