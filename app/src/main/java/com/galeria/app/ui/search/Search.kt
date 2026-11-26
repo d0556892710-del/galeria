@@ -115,6 +115,8 @@ fun SearchScreen(
         kotlinx.coroutines.delay(90)
         val words = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { searchLibrary(library, query, fmt, smart) }
         value = query to words
+        // Meaning search once typing pauses (each look costs the words model a moment).
+        kotlinx.coroutines.delay(260)
         val meaning = semantic?.let { f -> runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { f(query, library) } }.getOrDefault(emptyList()) }.orEmpty()
         if (meaning.isNotEmpty()) value = query to (meaning + words).distinctBy { it.id }
     }
