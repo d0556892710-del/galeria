@@ -98,6 +98,10 @@ import com.galeria.app.R
 import com.galeria.app.data.Media
 import com.galeria.app.data.Thumb
 import com.galeria.app.glass.backdropSource
+import androidx.compose.foundation.layout.asPaddingValues
+import com.galeria.app.glass.scrollEdge
+import com.galeria.app.ui.theme.LocalGlass
+import androidx.compose.runtime.CompositionLocalProvider
 import com.galeria.app.glass.rememberBackdrop
 import com.galeria.app.ui.components.GlassIconButton
 import com.galeria.app.ui.components.GlassSurface
@@ -284,6 +288,15 @@ fun Viewer(
     }
     LaunchedEffect(cur?.id) { liveTextOn = false }
     val bg = if (!chrome || p.dark) Color.Black else Color.White
+    // Over plain white (or black) there is nothing behind the glass to blur, so it would vanish;
+    // like iPhone, it gets a soft grey body and a bit more shadow so the buttons always show.
+    val baseLook = LocalGlass.current
+    val viewerLook = remember(baseLook, p.dark) {
+        if (p.dark) baseLook.copy(tint = Color(0xFF2C2C2E).copy(alpha = max(baseLook.tint.alpha, .6f)), shadowAlpha = max(baseLook.shadowAlpha, .35f))
+        else baseLook.copy(tint = Color(0xFFE5E5EA).copy(alpha = max(baseLook.tint.alpha, .52f)), shadowAlpha = max(baseLook.shadowAlpha, .16f))
+    }
+    val statusTopV = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navBottomV = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     BoxWithConstraints(
         Modifier
@@ -346,6 +359,20 @@ fun Viewer(
             )
         }
 
+        // ---- scroll edge, like the Library: the photo blurs softly under the bars ----
+        if (cur != null) {
+            Box(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusTopV + 112.dp)
+                    .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
+                    .scrollEdge(backdrop, true, bg.copy(alpha = if (p.dark) .5f else .7f), with(density) { 14.dp.toPx() })
+            )
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(navBottomV + 150.dp)
+                    .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
+                    .scrollEdge(backdrop, false, bg.copy(alpha = if (p.dark) .35f else .38f), with(density) { 5.dp.toPx() })
+            )
+        }
+
         // ---- top bar ----
         if (cur != null) Box(
             Modifier
@@ -354,7 +381,7 @@ fun Viewer(
                 .padding(start = 16.dp, end = 16.dp, top = 4.dp)
                 .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
         ) {
-            if (chromeShown) {
+            if (chromeShown) CompositionLocalProvider(LocalGlass provides viewerLook) {
                 GlassIconButton(backdrop, Sym.chevronBack, stringResource(R.string.back), { close() }, Modifier.align(Alignment.CenterStart))
                 GlassSurface(backdrop, Modifier.align(Alignment.Center).heightIn(min = 44.dp).widthIn(max = 240.dp), RoundedCornerShape(22.dp)) {
                     Column(Modifier.padding(horizontal = 18.dp, vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -387,7 +414,7 @@ fun Viewer(
                     .padding(end = 16.dp, bottom = 132.dp)
                     .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
             ) {
-                if (chromeShown) androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                if (chromeShown) CompositionLocalProvider(LocalGlass provides viewerLook) { androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                     if (liveTextOn) {
                         com.galeria.app.ui.components.GlassTextButton(backdrop, stringResource(R.string.copy_all), {
                             bridge.copyText(textBoxes.orEmpty().joinToString("\n") { it.text }); overlays.toast(appCtx.getString(R.string.copied))
@@ -398,7 +425,7 @@ fun Viewer(
                         backdrop, Sym.liveText, stringResource(R.string.live_text), { liveTextOn = !liveTextOn },
                         tint = if (liveTextOn) Color.White.copy(alpha = .92f) else null, iconTint = if (liveTextOn) Color.Black else null,
                     )
-                }
+                } }
             }
         }
 
@@ -411,9 +438,11 @@ fun Viewer(
                     .padding(start = 16.dp, top = 58.dp)
                     .graphicsLayer { alpha = chromeAlphaState.value * dismissFade() }
             ) {
-                if (chromeShown) LiveBadge(backdrop, eff, onMenu = { r ->
-                    overlays.menu(r, liveMenu(eff, ctxRes) { e -> vm.repo.edits.setEffect(cur.id, e) })
-                })
+                if (chromeShown) CompositionLocalProvider(LocalGlass provides viewerLook) {
+                    LiveBadge(backdrop, eff, onMenu = { r ->
+                        overlays.menu(r, liveMenu(eff, ctxRes) { e -> vm.repo.edits.setEffect(cur.id, e) })
+                    })
+                }
             }
         }
 
@@ -426,7 +455,7 @@ fun Viewer(
                 .padding(bottom = 10.dp)
                 .graphicsLayer { alpha = chromeAlphaState.value * dismissFade(); translationY = if (infoOpen) 400f else 0f }
         ) {
-            if (chromeShown) {
+            if (chromeShown) CompositionLocalProvider(LocalGlass provides viewerLook) {
                 if (cur.isVideo) VideoBar(backdrop, video)
                 else if (items.size > 1) Strip(items, pager.currentPage) { i -> scope.launch { pager.scrollToPage(i) } }
                 Spacer(Modifier.height(12.dp))
