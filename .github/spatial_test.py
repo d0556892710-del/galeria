@@ -10,11 +10,20 @@ def adb(*a, timeout=120):
 def sh(c, timeout=120): return adb("shell", c, timeout=timeout).decode("utf-8", "ignore")
 def shot(name):
     png = adb("exec-out", "screencap", "-p"); open(f"{OUT}/{name}.png", "wb").write(png)
-def nodes():
+def dump():
     sh("uiautomator dump /sdcard/ui.xml"); x = adb("exec-out", "cat", "/sdcard/ui.xml")
     try: root = ET.fromstring(x)
     except Exception: return []
     return [(e.get("text", ""), e.get("content-desc", ""), [int(v) for v in re.findall(r"\d+", e.get("bounds", ""))]) for e in root.iter("node")]
+def nodes():
+    # The slow virtual phone sometimes shows "<app> isn't responding" for its own launcher: wait it out.
+    for _ in range(3):
+        ns = dump()
+        if not any("isn't responding" in t or "isn’t responding" in t for t, d, b in ns): return ns
+        for t, d, b in ns:
+            if t.strip() == "Wait" and len(b) == 4: sh(f"input tap {(b[0]+b[2])//2} {(b[1]+b[3])//2}"); print("   (dismissed a system 'not responding' dialog)", flush=True); break
+        time.sleep(1.5)
+    return dump()
 def find(label):
     for t, d, b in nodes():
         if (t.strip() == label or d.strip() == label) and len(b) == 4: return b
