@@ -1,2 +1,2 @@
-# name url  (Depth Anything V2 Small, Apache-2.0: Spatial Scenes and Portrait)
-depth_small.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+# name url  (BiRefNet lite, MIT: subject lift outline)
+birefnet_lite.onnx https://huggingface.co/onnx-community/BiRefNet_lite/resolve/main/onnx/model.onnx
