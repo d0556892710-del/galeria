@@ -1,0 +1,50 @@
+name: Patch AI models
+# Makes the bundled models run on ONNX Runtime for Android (checked with the same runtime version the app uses).
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-models.yml'
+      - '.github/patch_clip.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Patch the CLIP text model
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install --quiet onnx==1.16.2 numpy
+          mkdir -p in out
+          gh release download ai-models -p clip_text.onnx -D in
+          python3 .github/patch_clip.py patch in/clip_text.onnx out/clip_text.onnx
+          # Token ids for a few phrases (start, words, end, padding): any ids work for the check.
+          python3 -c "
+          import numpy as np
+          rng = np.random.default_rng(0); ids = np.zeros((3, 77), np.int64)
+          for i, n in enumerate([4, 7, 12]):
+              ids[i, 0] = 49406; ids[i, 1:n] = rng.integers(300, 40000, n - 1); ids[i, n] = 49407
+          np.save('ids.npy', ids)"
+      - name: The patched model runs on the app's runtime (1.19.2)
+        run: |
+          pip install --quiet onnxruntime==1.19.2
+          python3 .github/patch_clip.py run out/clip_text.onnx ids.npy patched.npy
+          python3 .github/patch_clip.py run in/clip_text.onnx ids.npy orig_old.npy && echo "original also runs here" || echo "original fails on 1.19.2 (expected)"
+      - name: Same results as the original (newer runtime)
+        run: |
+          pip install --quiet -U onnxruntime
+          python3 .github/patch_clip.py run in/clip_text.onnx ids.npy orig.npy
+          python3 -c "
+          import numpy as np
+          a, b = np.load('orig.npy'), np.load('patched.npy'); d = float(np.abs(a - b).max())
+          print('max difference', d); assert d < 1e-4"
+      - name: Replace it in the bundled models
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ai-models out/clip_text.onnx --clobber

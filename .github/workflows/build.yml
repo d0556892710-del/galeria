@@ -11,6 +11,8 @@ on:
       - '.github/models.txt'
       - '.github/workflows/add-models.yml'
       - '.github/add_models.txt'
+      - '.github/workflows/patch-models.yml'
+      - '.github/patch_clip.py'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
