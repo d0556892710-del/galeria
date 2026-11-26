@@ -287,6 +287,57 @@ fun Viewer(
         }
     }
     LaunchedEffect(cur?.id) { liveTextOn = false }
+
+    // Spatial Scenes: once a photo settles, the depth model checks whether it has a clear subject
+    // (each photo once); if so the hexagon appears, and a tap turns the photo into a 3D scene.
+    val spatialOk by androidx.compose.runtime.produceState(false, cur?.id, cur?.dateModified, showPager) {
+        value = false
+        val m = cur
+        if (m != null && spatialSupported && !m.isVideo && showPager && vs.ctx != ViewerCtx.Hidden) {
+            SpatialStore.known(m)?.let { value = it.eligible; return@produceState }
+            delay(650)
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching { SpatialStore.analyse(appCtx, m) }.onFailure { android.util.Log.w("Photos", "spatial", it) }.getOrNull()?.eligible == true
+            }
+        }
+    }
+    var spatialId by remember { mutableStateOf<Long?>(null) }
+    var spatialScene by remember { mutableStateOf<com.galeria.app.data.Spatial.Scene?>(null) }
+    var spatialBg by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var spatialBusy by remember { mutableStateOf(false) }
+    val spatialAppear = remember { Animatable(0f) }
+    // Another photo, or zooming in, ends the scene.
+    LaunchedEffect(cur?.id) {
+        spatialId = null
+        val m = cur ?: return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { zoomOf(m).zoomed }.collect { if (it) spatialId = null }
+    }
+    LaunchedEffect(spatialId) {
+        val id = spatialId
+        if (id == null) {
+            spatialBusy = false
+            spatialAppear.animateTo(0f, tween(260)); spatialScene = null; spatialBg = null
+            return@LaunchedEffect
+        }
+        val m = cur?.takeIf { it.id == id } ?: return@LaunchedEffect
+        spatialBusy = true
+        val built = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching { SpatialStore.scene(appCtx, m) }.onFailure { android.util.Log.w("Photos", "spatial scene", it) }.getOrNull()
+        }
+        spatialBusy = false
+        if (built == null) { spatialId = null; return@LaunchedEffect }
+        spatialScene = built.first; spatialBg = built.first.bg
+        spatialAppear.snapTo(0f)
+        spatialAppear.animateTo(1f, tween(520, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        // Then what was behind the subject is painted in properly (LaMa), and swapped in unnoticed.
+        val t0 = System.currentTimeMillis()
+        val sharp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            try { com.galeria.app.data.Spatial.sharpen(appCtx, built.second, built.first) } finally { built.second.recycle(); com.galeria.app.data.LaMa.release() }
+        }
+        android.util.Log.i("PhotosPerf", "spatial fill ok=${sharp != null} ms=${System.currentTimeMillis() - t0}")
+        if (sharp != null && spatialId == id) spatialBg = sharp
+    }
+    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.Depth.release() }.start() } }
     val bg = if (!chrome || p.dark) Color.Black else Color.White
     // Over plain white (or black) there is nothing behind the glass to blur, so it would vanish;
     // like iPhone, it gets a soft grey body and a bit more shadow so the buttons always show.
@@ -331,6 +382,9 @@ fun Viewer(
                     onLivePress = { livePressed = it },
                     motion = vm.repo.motion,
                     editParams = if (live) remember(m.id, m.dateModified) { com.galeria.app.ui.editor.EditParams.fromJson(vm.repo.edits.params(m.id)) } else null,
+                    spatial = spatialScene?.takeIf { it.id == m.id },
+                    spatialBg = spatialBg,
+                    spatialAppear = { spatialAppear.value },
                     textBoxes = if (isCur && liveTextOn) textBoxes else null,
                     onCopyText = { t -> bridge.copyText(t); overlays.toast(appCtx.getString(R.string.copied)) },
                     boxSize = boxSize,
@@ -383,7 +437,8 @@ fun Viewer(
         ) {
             if (chromeShown) CompositionLocalProvider(LocalGlass provides viewerLook) {
                 GlassIconButton(backdrop, Sym.chevronBack, stringResource(R.string.back), { close() }, Modifier.align(Alignment.CenterStart))
-                GlassSurface(backdrop, Modifier.align(Alignment.Center).heightIn(min = 44.dp).widthIn(max = 240.dp), RoundedCornerShape(22.dp)) {
+                val grouped = spatialOk || spatialId != null
+                GlassSurface(backdrop, Modifier.align(Alignment.Center).heightIn(min = 44.dp).widthIn(max = if (grouped) 200.dp else 240.dp), RoundedCornerShape(22.dp)) {
                     Column(Modifier.padding(horizontal = 18.dp, vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         val title = when {
                             vs.ctx == ViewerCtx.External && cur.id < 0 -> cur.displayName
@@ -397,9 +452,19 @@ fun Viewer(
                         }
                     }
                 }
-                GlassIconButton(
-                    backdrop, Sym.ellipsis, stringResource(R.string.more),
-                    { overlays.menu(moreRect, moreMenu(cur, vs.ctx, actions, bridge, overlays, vm, more) { slideshow = true }) },
+                val openMore = { overlays.menu(moreRect, moreMenu(cur, vs.ctx, actions, bridge, overlays, vm, more) { slideshow = true }) }
+                if (grouped) {
+                    // Spatial Scene sits with More in one capsule, like iPhone.
+                    GlassSurface(backdrop, Modifier.align(Alignment.CenterEnd).height(44.dp), RoundedCornerShape(22.dp)) {
+                        Row(Modifier.padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TopPill(Sym.hexagon, stringResource(R.string.spatial_scene), on = spatialId != null, busy = spatialBusy) {
+                                spatialId = if (spatialId == null) cur.id else null
+                            }
+                            TopPill(Sym.ellipsis, stringResource(R.string.more), Modifier.onRootRect { moreRect = it }, onClick = openMore)
+                        }
+                    }
+                } else GlassIconButton(
+                    backdrop, Sym.ellipsis, stringResource(R.string.more), openMore,
                     Modifier.align(Alignment.CenterEnd).onRootRect { moreRect = it },
                 )
             }
@@ -543,6 +608,9 @@ private fun MediaPage(
     onLivePress: (Boolean) -> Unit,
     motion: com.galeria.app.data.MotionStore,
     editParams: com.galeria.app.ui.editor.EditParams?,
+    spatial: com.galeria.app.data.Spatial.Scene?,
+    spatialBg: android.graphics.Bitmap?,
+    spatialAppear: () -> Float,
     textBoxes: List<TextBox>?,
     onCopyText: (String) -> Unit,
     boxSize: Size,
@@ -675,6 +743,7 @@ private fun MediaPage(
                     else -> LiveLayer(m, video, motion, playing = livePressed || (effect == com.galeria.app.data.LiveEffect.Loop && active), loop = effect == com.galeria.app.data.LiveEffect.Loop, edit = editParams)
                 }
             }
+            if (spatial != null && spatialBg != null && fit != Rect.Zero && android.os.Build.VERSION.SDK_INT >= 33) SpatialLayer(spatial, spatialBg, fit, spatialAppear)
             if (textBoxes != null && fit != Rect.Zero) LiveTextOverlay(textBoxes, fit, onCopyText)
         }
     }
@@ -712,6 +781,30 @@ private fun Toolbar(
             backdrop, Sym.trash, stringResource(R.string.delete), onDelete, size = 50.dp, iconSize = 23.dp,
             enabled = ctx != ViewerCtx.External || m.id > 0,
         )
+    }
+}
+
+/** A button inside a top-bar capsule; [on] shows it switched on, [busy] while it works. */
+@Composable
+private fun TopPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier = Modifier,
+    on: Boolean = false, busy: Boolean = false, onClick: () -> Unit,
+) {
+    Box(
+        modifier
+            .size(44.dp, 44.dp)
+            .pressable(onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (on) Box(Modifier.size(36.dp).background(Color.White.copy(alpha = .92f), androidx.compose.foundation.shape.CircleShape))
+        val tint = if (on) Color.Black else LocalContentColor.current
+        if (busy) {
+            // Breathes while the scene is being made.
+            val pulse = androidx.compose.animation.core.rememberInfiniteTransition(label = "busy")
+            val a = pulse.animateFloat(1f, .35f, androidx.compose.animation.core.infiniteRepeatable(tween(520), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
+            Icon(icon, null, Modifier.size(21.dp).graphicsLayer { alpha = a.value }, tint = tint)
+        } else Icon(icon, null, Modifier.size(21.dp), tint = tint)
     }
 }
 

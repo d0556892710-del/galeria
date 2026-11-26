@@ -337,4 +337,5 @@
     <string name="wallpaper_failed">Couldn’t set the wallpaper</string>
     <string name="customize_reorder">Customize &amp; Reorder</string>
     <string name="reorder">Reorder</string>
+    <string name="spatial_scene">Spatial Scene</string>
 </resources>

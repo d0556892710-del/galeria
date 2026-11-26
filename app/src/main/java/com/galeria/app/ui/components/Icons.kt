@@ -68,6 +68,8 @@ object Sym {
     val lock = build("lock") { f(rrect(5f, 10.4f, 14f, 10.6f, 2.5f)); s("M8 10.4V7.8a4 4 0 0 1 8 0v2.6", 2.2f) }
     val checkmark = build("checkmark") { s("M4.8 12.6l4.6 4.6 9.8-10", 2.7f) }
     val reorder = build("reorder") { s("M4 7.5h16M4 12h16M4 16.5h16", 1.9f) }
+    /** Spatial Scene. */
+    val hexagon = build("hexagon") { s("M12 2.6L20.1 7.3V16.7L12 21.4L3.9 16.7V7.3Z", 1.9f) }
     val play = build("play") { f("M7.5 5.1v13.8c0 .85.95 1.35 1.65.87l10.4-6.9c.62-.42.62-1.33 0-1.74L9.15 4.23C8.45 3.75 7.5 4.25 7.5 5.1z") }
     val pause = build("pause") { f(rrect(6.3f, 4.6f, 4.1f, 14.8f, 1.3f)); f(rrect(13.6f, 4.6f, 4.1f, 14.8f, 1.3f)) }
     val xmarkCircle = build("xmarkCircle") { f(circle(12f, 12f, 9.4f)); s("M9 9l6 6M15 9l-6 6", 1.9f, alpha = 0f) }

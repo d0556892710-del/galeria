@@ -37,6 +37,16 @@ object LaMa {
         return f
     }
 
+    // Sessions in use are never closed under a running fill: a release waits for the last user.
+    private var users = 0
+    private var releaseWanted = false
+
+    @Synchronized
+    private fun acquire(context: Context, size: Int): OrtSession { users++; releaseWanted = false; return try { session(context, size) } catch (e: Throwable) { users--; throw e } }
+
+    @Synchronized
+    private fun done() { users--; if (users == 0 && releaseWanted) closeAll() }
+
     @Synchronized
     private fun session(context: Context, size: Int): OrtSession = sessions.getOrPut(size) {
         val opts = OrtSession.SessionOptions().apply {
@@ -48,9 +58,11 @@ object LaMa {
 
     /** Frees the models' memory (when leaving the editor). */
     @Synchronized
-    fun release() {
+    fun release() { if (users > 0) releaseWanted = true else closeAll() }
+
+    private fun closeAll() {
         sessions.values.forEach { runCatching { it.close() } }
-        sessions.clear()
+        sessions.clear(); releaseWanted = false
     }
 
     /**
@@ -69,7 +81,11 @@ object LaMa {
             image.put(2 * n + i, (c and 0xFF) / 255f)
             mask.put(i, if (hole[i]) 1f else 0f)
         }
-        val s = session(context, size)
+        val s = acquire(context, size)
+        try { return run(s, size, image, mask, n, timeoutMs) } finally { done() }
+    }
+
+    private fun run(s: OrtSession, size: Int, image: FloatBuffer, mask: FloatBuffer, n: Int, timeoutMs: Long): Bitmap {
         val shape = longArrayOf(1, 3, size.toLong(), size.toLong())
         val out = IntArray(n)
         OnnxTensor.createTensor(env, image, shape).use { ti ->

@@ -344,4 +344,5 @@
     <string name="wallpaper_failed">לא ניתן להגדיר את הרקע</string>
     <string name="customize_reorder">התאמה אישית וסידור מחדש</string>
     <string name="reorder">שינוי סדר</string>
+    <string name="spatial_scene">סצנה מרחבית</string>
 </resources>

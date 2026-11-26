@@ -298,4 +298,68 @@ jobs:
           if ls cleanup_shots/*.png >/dev/null 2>&1; then
             gh release delete cleanup-shots --yes --cleanup-tag || true
             gh release create cleanup-shots cleanup_shots/*.png cleanup-result.txt --draft --title "Clean Up test" --notes "Built from ${GITHUB_SHA::7}"
+
+  spatial-test:
+    # Spatial Scenes on a virtual Android 13 phone (the 3D drawing needs its GPU shaders).
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Download Gradle wrapper jar
+        run: |
+          mkdir -p gradle/wrapper
+          curl -L "https://github.com/gradle/gradle/raw/v8.7.0/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
+          chmod +x gradlew
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+      - name: Bundle models and build for x86_64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p app/src/main/assets/models
+          gh release download ai-models -p '*.onnx' -p '*.json' -D app/src/main/assets/models --clobber
+          ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
+          mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
+          ls -la apk
+      - name: Test photo
+        run: |
+          python3 -m pip install --quiet scikit-image pillow numpy
+          python3 -c "from skimage import data; from PIL import Image; [Image.fromarray(getattr(data, n)()).convert('RGB').save(n + '.jpg', quality=95) for n in ('coffee', 'astronaut', 'brick')]"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Spatial Scenes on a virtual phone
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          cores: 4
+          ram-size: 6144M
+          disk-size: 6G
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash .github/spatial_test.sh
+      - name: Upload screenshots
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat spatial-result.txt 2>/dev/null || true
+          if ls spatial_shots/*.png >/dev/null 2>&1; then
+            gh release delete spatial-shots --yes --cleanup-tag || true
+            gh release create spatial-shots spatial_shots/*.png spatial-result.txt --draft --title "Spatial test" --notes "Built from ${GITHUB_SHA::7}"
           fi
