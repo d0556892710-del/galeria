@@ -27,11 +27,23 @@ jobs:
           ls -la big-lama.pt
       - name: Export
         run: python3 .github/export_lama.py 512 1024
+      - name: SAM 2.1 small (Apache-2.0) for picking the object in Clean Up
+        run: |
+          curl -fL --retry 4 -o sam.zip https://huggingface.co/vietanhdev/segment-anything-2.1-onnx-models/resolve/main/sam2.1_hiera_small_20260221.zip
+          mkdir -p sam && unzip -o -q sam.zip -d sam && find sam -type f
+          cp "$(find sam -name '*encoder.onnx' | head -1)" sam_encoder.onnx
+          cp "$(find sam -name '*decoder.onnx' | head -1)" sam_decoder.onnx
+          python3 -c "
+          import onnxruntime as ort
+          for f in ('sam_encoder.onnx','sam_decoder.onnx'):
+              s=ort.InferenceSession(f, providers=['CPUExecutionProvider'])
+              print(f, [(i.name,i.shape) for i in s.get_inputs()], [(o.name,o.shape) for o in s.get_outputs()])
+          "
       - name: Publish (public pre-release the app build downloads from; LaMa is Apache-2.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ls -la lama_*.onnx
-          sha256sum lama_*.onnx | tee SHA256SUMS.txt
+          sha256sum lama_*.onnx sam_*.onnx | tee SHA256SUMS.txt
           gh release delete ai-models --yes --cleanup-tag || true
-          gh release create ai-models lama_512.onnx lama_1024.onnx SHA256SUMS.txt --prerelease --title "On-device AI models" --notes "LaMa (big-lama, Apache-2.0, by Samsung AI Center / advimman) exported to ONNX at 512 and 1024 px for Clean Up."
+          gh release create ai-models lama_512.onnx lama_1024.onnx sam_encoder.onnx sam_decoder.onnx SHA256SUMS.txt --prerelease --title "On-device AI models" --notes "LaMa (big-lama, Apache-2.0, Samsung AI Center / advimman) exported to ONNX at 512 and 1024 px, and SAM 2.1 Hiera-S (Apache-2.0, Meta) for Clean Up."
