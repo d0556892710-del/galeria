@@ -29,5 +29,5 @@ jobs:
           ls -la add
           # They must open on the ONNX Runtime version the app ships (1.19.2).
           python3 -m pip install --quiet onnxruntime==1.19.2 numpy
-          for f in add/*.onnx; do python3 -c "import onnxruntime as o, sys; s = o.InferenceSession(sys.argv[1]); print(sys.argv[1], 'opens on', o.__version__, [i.name for i in s.get_inputs()])" "$f"; done
+          for f in add/*.onnx; do [ -e "$f" ] || continue; python3 -c "import onnxruntime as o, sys; s = o.InferenceSession(sys.argv[1]); print(sys.argv[1], 'opens on', o.__version__, [i.name for i in s.get_inputs()])" "$f"; done
           gh release upload ai-models add/* --clobber
