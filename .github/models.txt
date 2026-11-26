@@ -1,4 +1,6 @@
 # name url
-lama_fp32.onnx https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx
-migan_pipeline_v2.onnx https://huggingface.co/andraniksargsyan/migan/resolve/main/migan_pipeline_v2.onnx
-sam21_base_plus.zip https://huggingface.co/vietanhdev/segment-anything-2.1-onnx-models/resolve/main/sam2.1_hiera_base_plus_20260221.zip
+mc2_s2_vision.onnx https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/vision_model.onnx
+mc2_s2_text.onnx https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/text_model.onnx
+mc2_s2_preprocessor.json https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/preprocessor_config.json
+mc2_s2_config.json https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/config.json
+clip_tokenizer.json https://huggingface.co/Xenova/mobileclip_s2/resolve/main/tokenizer.json
