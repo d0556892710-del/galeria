@@ -118,7 +118,9 @@ object CleanUp {
         repeat(max(2, (model * .008f).roundToInt())) { hole = dilate(hole, model, model) }
         if (hole.none { it }) return@runCatching null
 
+        val t0 = android.os.SystemClock.elapsedRealtime()
         val filled = LaMa.inpaint(context, model, input, hole)
+        android.util.Log.i("PhotosPerf", "cleanup model=$model area=$sq lasso=$lasso ms=${android.os.SystemClock.elapsedRealtime() - t0}")
 
         // Soft edge: fully replaced inside, blending out over a few pixels.
         val holeBmp = Bitmap.createBitmap(IntArray(model * model) { if (hole[it]) -0x1000000 else 0 }, model, model, Bitmap.Config.ARGB_8888)
