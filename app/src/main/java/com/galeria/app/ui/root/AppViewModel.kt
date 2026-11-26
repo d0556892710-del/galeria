@@ -175,6 +175,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The Memory playing as a movie. */
     var playing by mutableStateOf<com.galeria.app.data.Memory?>(null)
+    /** Collections → "Customize & Reorder" sheet is open. */
+    var customizing by mutableStateOf(false)
 
     /** A photo to scroll to in Library (Show in All Photos). */
     var reveal by mutableStateOf<Long?>(null)
@@ -210,6 +212,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setScrollerLeft(v: Boolean) = viewModelScope.launch { store.setScrollerLeft(v) }
     fun setAlbumHidden(id: Long, hidden: Boolean) = viewModelScope.launch { store.setAlbumHidden(id, hidden) }
     fun setPinned(keys: List<String>) = viewModelScope.launch { store.setPinned(keys) }
+    fun setSections(order: List<String>) = viewModelScope.launch { store.setSections(order) }
+    fun setSectionHidden(id: String, hidden: Boolean) = viewModelScope.launch { store.setSectionHidden(id, hidden) }
     fun addViewed(m: Media) = viewModelScope.launch { if (m.id > 0) store.addViewed(m.id) }
 
     // ---------- navigation ----------

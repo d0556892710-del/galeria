@@ -33,7 +33,16 @@ data class AppSettings(
     val shrinkOnScrollDown: Boolean = true,
     /** The ↑↓ fast scroller sits on the left edge instead of the right. */
     val scrollerOnLeft: Boolean = false,
+    /** Collections: the order of the sections, and which ones are hidden ("Customize & Reorder"). */
+    val sections: List<String> = DefaultSections,
+    val sectionsHidden: Set<String> = emptySet(),
 )
+
+val DefaultSections = listOf("pinned", "memories", "albums", "media", "utilities")
+
+/** Known sections in the saved order; new ones (from an update) are added at the end. */
+fun normalizeSections(saved: List<String>): List<String> =
+    (saved.filter { it in DefaultSections } + DefaultSections).distinct()
 
 val DefaultPinned = listOf("fav", "saved", "videos", "shots")
 
@@ -55,6 +64,8 @@ class SettingsStore(private val context: Context) {
         val pinned = stringPreferencesKey("pinned")
         val shrinkDown = booleanPreferencesKey("shrink_on_scroll_down")
         val scrollerLeft = booleanPreferencesKey("scroller_on_left")
+        val sections = stringPreferencesKey("sections")
+        val sectionsHidden = stringSetPreferencesKey("sections_hidden")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map { p -> p.toSettings() }
@@ -76,6 +87,8 @@ class SettingsStore(private val context: Context) {
         shrinkOnScrollDown = this[K.shrinkDown] ?: true,
         scrollerOnLeft = this[K.scrollerLeft] ?: false,
         pinned = (this[K.pinned]?.split(',')?.filter { it.isNotBlank() } ?: DefaultPinned).distinct(),
+        sections = normalizeSections(this[K.sections]?.split(',')?.filter { it.isNotBlank() } ?: DefaultSections),
+        sectionsHidden = (this[K.sectionsHidden] ?: emptySet()).filter { it in DefaultSections }.toSet(),
     )
 
     suspend fun setTheme(v: ThemeMode) = context.store.edit { it[K.theme] = v.name }
@@ -101,6 +114,12 @@ class SettingsStore(private val context: Context) {
         p[K.hiddenAlbums] = cur
     }
     suspend fun setPinned(keys: List<String>) = context.store.edit { it[K.pinned] = keys.distinct().joinToString(",") }
+    suspend fun setSections(order: List<String>) = context.store.edit { it[K.sections] = normalizeSections(order).joinToString(",") }
+    suspend fun setSectionHidden(id: String, hidden: Boolean) = context.store.edit { p ->
+        val cur = (p[K.sectionsHidden] ?: emptySet()).toMutableSet()
+        if (hidden) cur += id else cur -= id
+        p[K.sectionsHidden] = cur
+    }
 
     suspend fun addSearch(q: String) = context.store.edit { p ->
         val cur = (p[K.searches] ?: "").split('\u0001').filter { it.isNotBlank() && !it.equals(q, true) }

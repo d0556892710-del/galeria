@@ -86,52 +86,63 @@ fun CollectionsScreen(
         contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
         modifier = Modifier.fillMaxSize().background(p.background),
     ) {
-        item(key = "pinned") {
-            Section("pinned", stringResource(R.string.pinned), collapsed, onToggle, onTitle = { onOpen(Page.PinnedList) }) {
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(pinned, key = { it.key }) { e ->
-                        CoverCard(e.cover, e.title, if (e.key == "fav") Sym.heartFill else e.icon) { onOpen(e.page) }
+        for (id in settings.sections) {
+            if (id in settings.sectionsHidden) continue
+            when (id) {
+                "pinned" -> item(key = "pinned") {
+                    Section("pinned", stringResource(R.string.pinned), collapsed, onToggle, onTitle = { onOpen(Page.PinnedList) }) {
+                        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(pinned, key = { it.key }) { e ->
+                                CoverCard(e.cover, e.title, if (e.key == "fav") Sym.heartFill else e.icon) { onOpen(e.page) }
+                            }
+                            item(key = "+") {
+                                Box(
+                                    Modifier.size(116.dp).clip(RoundedCornerShape(20.dp)).background(p.fill).pressable { onOpen(Page.PinnedList) },
+                                    contentAlignment = Alignment.Center,
+                                ) { Icon(Sym.plus, stringResource(R.string.add_to_pinned), Modifier.size(28.dp), tint = p.secondaryLabel) }
+                            }
+                        }
                     }
-                    item(key = "+") {
-                        Box(
-                            Modifier.size(116.dp).clip(RoundedCornerShape(20.dp)).background(p.fill).pressable { onOpen(Page.PinnedList) },
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Sym.plus, stringResource(R.string.add_to_pinned), Modifier.size(28.dp), tint = p.secondaryLabel) }
+                }
+                "memories" -> if (memories.isNotEmpty()) item(key = "memories") {
+                    Section("memories", stringResource(R.string.memories), collapsed, onToggle, onTitle = { onOpen(Page.MemoriesList) }) {
+                        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(memories, key = { it.id }) { mem -> MemoryCard(mem) { onOpen(Page.Memory(mem.id, mem.title)) } }
+                        }
+                    }
+                }
+                "albums" -> if (albums.isNotEmpty()) item(key = "albums") {
+                    Section("albums", stringResource(R.string.albums), collapsed, onToggle, onTitle = { onOpen(Page.AllAlbums) }) {
+                        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(albums, key = { it.key }) { a ->
+                                CoverCard(a.cover, a.name, Sym.photo, count = a.count, onLongPress = { r -> onAlbumMenu(a, r) }) { onOpen(a.page) }
+                            }
+                        }
+                    }
+                }
+                "media" -> item(key = "media") {
+                    Section("media", stringResource(R.string.media_types), collapsed, onToggle, onTitle = { onOpen(Page.MediaTypesList) }) {
+                        Tiles(types.map { Triple(it.icon, it.title, it.page) }, locked = emptySet(), onOpen = onOpen)
+                    }
+                }
+                "utilities" -> item(key = "utilities") {
+                    Section("utilities", stringResource(R.string.utilities), collapsed, onToggle, onTitle = { onOpen(Page.UtilitiesList) }) {
+                        Tiles(
+                            utils.map { Triple(it.icon, it.title, it.page) },
+                            locked = if (settings.lockAlbums) setOf<Page>(Page.Hidden, Page.Deleted) else emptySet(),
+                            onOpen = onOpen,
+                        )
                     }
                 }
             }
         }
-        if (memories.isNotEmpty()) item(key = "memories") {
-            Section("memories", stringResource(R.string.memories), collapsed, onToggle, onTitle = { onOpen(Page.MemoriesList) }) {
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(memories, key = { it.id }) { mem -> MemoryCard(mem) { onOpen(Page.Memory(mem.id, mem.title)) } }
-                }
-            }
-        }
-        if (albums.isNotEmpty()) item(key = "albums") {
-            Section("albums", stringResource(R.string.albums), collapsed, onToggle, onTitle = { onOpen(Page.AllAlbums) }) {
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(albums, key = { it.key }) { a ->
-                        CoverCard(a.cover, a.name, Sym.photo, count = a.count, onLongPress = { r -> onAlbumMenu(a, r) }) { onOpen(a.page) }
-                    }
-                }
-            }
-        }
-        item(key = "media") {
-            Section("media", stringResource(R.string.media_types), collapsed, onToggle, onTitle = { onOpen(Page.MediaTypesList) }) {
-                Tiles(
-                    types.map { Triple(it.icon, it.title, it.page) },
-                    locked = emptySet(),
-                    onOpen = onOpen,
-                )
-            }
-        }
-        item(key = "utilities") {
-            Section("utilities", stringResource(R.string.utilities), collapsed, onToggle, onTitle = { onOpen(Page.UtilitiesList) }) {
-                Tiles(
-                    utils.map { Triple(it.icon, it.title, it.page) },
-                    locked = if (settings.lockAlbums) setOf<Page>(Page.Hidden, Page.Deleted) else emptySet(),
-                    onOpen = onOpen,
+        // iOS: "Customize & Reorder" at the end of Collections.
+        item(key = "customize") {
+            Box(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(R.string.customize_reorder),
+                    style = Type.subheadSemibold, color = p.label,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(p.fill).pressable { vm.customizing = true }.padding(horizontal = 18.dp, vertical = 11.dp),
                 )
             }
         }

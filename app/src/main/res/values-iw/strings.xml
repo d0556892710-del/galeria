@@ -342,4 +342,6 @@
     <string name="wall_both">מסך הבית ומסך הנעילה</string>
     <string name="wallpaper_set">הרקע הוגדר</string>
     <string name="wallpaper_failed">לא ניתן להגדיר את הרקע</string>
+    <string name="customize_reorder">התאמה אישית וסידור מחדש</string>
+    <string name="reorder">שינוי סדר</string>
 </resources>

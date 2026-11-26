@@ -335,4 +335,6 @@
     <string name="wall_both">Home &amp; Lock Screens</string>
     <string name="wallpaper_set">Wallpaper Set</string>
     <string name="wallpaper_failed">Couldn’t set the wallpaper</string>
+    <string name="customize_reorder">Customize &amp; Reorder</string>
+    <string name="reorder">Reorder</string>
 </resources>
