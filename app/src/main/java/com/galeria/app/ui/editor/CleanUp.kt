@@ -119,7 +119,14 @@ object CleanUp {
         if (hole.none { it }) return@runCatching null
 
         val t0 = android.os.SystemClock.elapsedRealtime()
-        val filled = LaMa.inpaint(context, model, input, hole)
+        val filled = try {
+            LaMa.inpaint(context, model, input, hole)
+        } catch (t: Throwable) {
+            // The model couldn't run (memory, unsupported phone…): use the classic fill instead.
+            android.util.Log.w("Photos", "LaMa failed, classic fill", t)
+            listOf(region, square, input, maskBmp).forEach { if (it !== src) runCatching { it.recycle() } }
+            return@runCatching removeClassic(context, src, inv, path, ow, brush, lasso, minX, minY, maxX, maxY)
+        }
         android.util.Log.i("PhotosPerf", "cleanup model=$model area=$sq lasso=$lasso ms=${android.os.SystemClock.elapsedRealtime() - t0}")
 
         // Soft edge: fully replaced inside, blending out over a few pixels.
