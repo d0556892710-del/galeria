@@ -307,15 +307,20 @@ fun PhotoGrid(
                                         auto = gridScope.launch {
                                             val edge = 70.dp.toPx()
                                             val topEdge = topPadding.toPx(); val bottomEdge = size.height - bottomPadding.toPx()
+                                            // Speed in px per second, stepped on every display frame: as smooth at 120 Hz as at 60 Hz.
+                                            val perSecond = 22f * 60f
+                                            var prev = 0L
                                             while (true) {
+                                                val now = androidx.compose.runtime.withFrameNanos { it }
+                                                val dt = if (prev == 0L) 1f / 60f else ((now - prev) / 1e9f).coerceIn(0f, .05f)
+                                                prev = now
                                                 val y = last.y
                                                 val speed = when {
-                                                    y < topEdge + edge -> -((topEdge + edge - y) / edge).coerceIn(.2f, 1.6f) * 22f
-                                                    y > bottomEdge - edge -> ((y - (bottomEdge - edge)) / edge).coerceIn(.2f, 1.6f) * 22f
+                                                    y < topEdge + edge -> -((topEdge + edge - y) / edge).coerceIn(.2f, 1.6f) * perSecond
+                                                    y > bottomEdge - edge -> ((y - (bottomEdge - edge)) / edge).coerceIn(.2f, 1.6f) * perSecond
                                                     else -> 0f
                                                 }
-                                                if (speed != 0f) { handle.state.scrollBy(speed); apply(last) }
-                                                kotlinx.coroutines.delay(16)
+                                                if (speed != 0f) { handle.state.scrollBy(speed * dt); apply(last) }
                                             }
                                         }
                                     } else break

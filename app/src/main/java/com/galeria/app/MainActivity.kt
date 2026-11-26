@@ -66,6 +66,24 @@ class MainActivity : AppCompatActivity(), Bridge {
         setContent {
             CompositionLocalProvider(LocalBridge provides this) { PhotosRoot(vm) }
         }
+        requestHighRefreshRate()
+    }
+
+    /**
+     * Runs at the screen's full refresh rate (120 Hz on the phone), like iPhone ProMotion.
+     * Many Xiaomi/HyperOS builds keep apps they don't know at 60 Hz unless the app asks; the user's own
+     * refresh-rate setting still wins, so with the phone set to 60 Hz the app simply runs at 60.
+     */
+    private fun requestHighRefreshRate() = runCatching {
+        val d = display ?: return@runCatching
+        val cur = d.mode
+        val best = d.supportedModes
+            .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return@runCatching
+        val a = window.attributes
+        if (a.preferredDisplayModeId != best.modeId || a.preferredRefreshRate != best.refreshRate) {
+            window.attributes = a.apply { preferredDisplayModeId = best.modeId; preferredRefreshRate = best.refreshRate }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -76,6 +94,7 @@ class MainActivity : AppCompatActivity(), Bridge {
 
     override fun onResume() {
         super.onResume()
+        requestHighRefreshRate()
         val before = vm.permissionGranted
         checkPermission()
         if (vm.permissionGranted) {

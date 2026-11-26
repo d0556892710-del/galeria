@@ -96,7 +96,9 @@ class MediaRepository(private val context: Context) {
 
     fun start() {
         if (!queried.get()) scope.launch {
+            val t0 = android.os.SystemClock.elapsedRealtime()
             val snap = loadSnapshot() ?: return@launch
+            android.util.Log.i("PhotosPerf", "snapshot n=${snap.size} ms=${android.os.SystemClock.elapsedRealtime() - t0}")
             synchronized(publishLock) {
                 if (!queried.get()) { _library.value = snap; _loaded.value = true }
             }
@@ -119,8 +121,10 @@ class MediaRepository(private val context: Context) {
         pending?.cancel()
         pending = scope.launch {
             if (delayMs > 0) delay(delayMs)
+            val t0 = android.os.SystemClock.elapsedRealtime()
             val result = runCatching { query(trashed = false) }
             val lib = result.getOrDefault(_library.value)
+            android.util.Log.i("PhotosPerf", "query n=${lib.size} ms=${android.os.SystemClock.elapsedRealtime() - t0}")
             synchronized(publishLock) {
                 queried.set(true)
                 _library.value = lib
