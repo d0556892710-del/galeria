@@ -52,9 +52,18 @@ t0 = time.time(); done = False
 while time.time() - t0 < 240:
     lc = adb("logcat", "-d", "-s", "PhotosPerf:I").decode("utf-8", "ignore")
     if "cleanup model" in lc: done = True; break
-    time.sleep(3)
+    time.sleep(2)
 time.sleep(3)
-shot("05_after_cleanup")
+shot("05_after_cleanup_quick")
+print(f"quick result after {time.time()-t0:.0f}s", flush=True)
+# A sharper second pass may follow for big objects.
+t1 = time.time()
+while time.time() - t1 < 200:
+    lc = adb("logcat", "-d", "-s", "PhotosPerf:I").decode("utf-8", "ignore")
+    if "cleanup model=1024" in lc: break
+    time.sleep(3)
+time.sleep(4)
+shot("06_after_cleanup_sharp")
 lc = adb("logcat", "-d").decode("utf-8", "ignore")
 for line in lc.splitlines():
     if "PhotosPerf" in line or "clean up" in line or "FATAL" in line or "OutOfMemory" in line or "onnxruntime" in line.lower(): print(line[:300], flush=True)
