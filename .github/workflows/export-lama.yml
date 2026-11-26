@@ -26,14 +26,12 @@ jobs:
           curl -fL --retry 4 -o big-lama.pt https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt
           ls -la big-lama.pt
       - name: Export
-        run: python3 .github/export_lama.py
-      - name: Publish
-        if: always()
+        run: python3 .github/export_lama.py 512 1024
+      - name: Publish (public pre-release the app build downloads from; LaMa is Apache-2.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ls -la *.onnx || true
-          if ls lama_*.onnx >/dev/null 2>&1; then
-            gh release delete models-lama-hr --yes --cleanup-tag || true
-            gh release create models-lama-hr lama_*.onnx --draft --title "LaMa high resolution" --notes "Exported by CI from big-lama."
-          fi
+          ls -la lama_*.onnx
+          sha256sum lama_*.onnx | tee SHA256SUMS.txt
+          gh release delete ai-models --yes --cleanup-tag || true
+          gh release create ai-models lama_512.onnx lama_1024.onnx SHA256SUMS.txt --prerelease --title "On-device AI models" --notes "LaMa (big-lama, Apache-2.0, by Samsung AI Center / advimman) exported to ONNX at 512 and 1024 px for Clean Up."
