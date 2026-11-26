@@ -1,0 +1,45 @@
+name: Fetch AI models
+# Downloads the on-device AI models into a private draft release, for evaluation and for the app build.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fetch-models.yml'
+      - '.github/models.txt'
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download models
+        run: |
+          mkdir -p models
+          while read -r name url; do
+            [ -z "$name" ] && continue
+            case "$name" in \#*) continue;; esac
+            echo "== $name"
+            curl -fL --retry 4 --retry-delay 5 -o "models/$name" "$url" || echo "FAILED $name"
+          done < .github/models.txt
+          ls -la models
+          sha256sum models/* > models/SHA256SUMS.txt
+          cat models/SHA256SUMS.txt
+      - name: Inspect ONNX models
+        run: |
+          python3 -m pip install --quiet onnxruntime
+          python3 - <<'PY'
+          import glob, onnxruntime as ort
+          for f in sorted(glob.glob("models/*.onnx")):
+              try:
+                  s = ort.InferenceSession(f, providers=["CPUExecutionProvider"])
+                  print(f, "IN", [(i.name, i.shape, i.type) for i in s.get_inputs()], "OUT", [(o.name, o.shape, o.type) for o in s.get_outputs()])
+              except Exception as e:
+                  print(f, "ERROR", e)
+          PY
+      - name: Publish to a private draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete models --yes --cleanup-tag || true
+          gh release create models models/* --draft --title "AI models" --notes "On-device models (downloaded by CI)."
