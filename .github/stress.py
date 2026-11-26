@@ -76,7 +76,10 @@ def frames(label):
         m = re.search(re.escape(k) + r":\s*([^\n]+)", g)
         if m: vals.append(f"{k.replace('Number ', '').replace(' percentile', 'p')}={m.group(1).strip()}")
     p = pid()
-    lc = adb("logcat", "-d", "-v", "brief")
+    lc_all = adb("logcat", "-d", "-v", "brief")
+    # Only this app's lines (other apps on the phone don't count).
+    pat = re.compile(r"\(\s*" + re.escape(p.strip()) + r"\)") if p.strip() else None
+    lc = "\n".join(l for l in lc_all.splitlines() if pat and pat.search(l))
     stalls = [int(x) for x in re.findall(r"Skipped (\d+) frames", lc)]
     davey = [int(x) for x in re.findall(r"Davey! duration=(\d+)ms", lc)]
     crash = "FATAL EXCEPTION" in lc or f"ANR in {PKG}" in lc
@@ -147,7 +150,11 @@ shot("viewer_after_swipes")
 frames("viewer swipes")
 adb("shell", "input", "keyevent", "4"); time.sleep(1.5)
 
+def front():
+    sh(f"am start -n {PKG}/.MainActivity"); time.sleep(2)
+
 print("## Collections", flush=True)
+front(); fling_down(3)
 t0 = time.time()
 tap("tab_collections"); time.sleep(3); shot("collections")
 fling_up(5); fling_down(5); frames("collections")
@@ -161,6 +168,7 @@ frames("open duplicates")
 adb("shell", "input", "keyevent", "4"); time.sleep(1); adb("shell", "input", "keyevent", "4"); time.sleep(1)
 
 print("## Search", flush=True)
+front(); fling_down(2)
 if tap("search"):
     time.sleep(1.5)
     sh("input text 2024"); time.sleep(3); shot("search_2024")

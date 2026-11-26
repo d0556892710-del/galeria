@@ -70,6 +70,23 @@ import com.galeria.app.ui.root.albumMenu
 import com.galeria.app.ui.theme.LocalPalette
 import com.galeria.app.ui.theme.Type
 
+/** Last results, shown at once while new ones are worked out (so nothing flickers). */
+private val lastResults = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+/**
+ * Works [compute] out off the main thread (a big library has tens of thousands of photos), keeping
+ * the previous result on screen meanwhile, so opening Collections never stutters.
+ */
+@Composable
+@Suppress("UNCHECKED_CAST")
+private fun <T : Any> background(key: String, vararg keys: Any?, compute: () -> T): T {
+    val initial = (lastResults[key] as? T) ?: compute().also { lastResults[key] = it }
+    val state = androidx.compose.runtime.produceState(initial, *keys) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { compute() }.also { lastResults[key] = it }
+    }
+    return state.value
+}
+
 /** One collection shown in a list, tile or pinned card. */
 data class Entry(val key: String, val icon: ImageVector, val title: String, val page: Page, val items: List<Media>) {
     val count: Int get() = items.size
@@ -80,7 +97,7 @@ data class Entry(val key: String, val icon: ImageVector, val title: String, val 
 @Composable
 fun mediaTypeEntries(lib: List<Media>, tags: MediaTags, effects: Map<Long, LiveEffect>): List<Entry> {
     val ctx = LocalContext.current
-    return remember(lib, tags, effects) {
+    return background("types", lib, tags, effects) {
         fun e(key: String, icon: ImageVector, title: Int, page: Page, items: List<Media>, always: Boolean = false) =
             if (always || items.isNotEmpty()) Entry(key, icon, ctx.getString(title), page, items) else null
         listOfNotNull(
@@ -106,7 +123,7 @@ fun utilityEntries(vm: AppViewModel, lib: List<Media>, s: AppSettings): List<Ent
     val ctx = LocalContext.current
     val trashed by vm.trashed.collectAsState()
     val hidden by vm.hidden.collectAsState()
-    return remember(lib, s, trashed, hidden) {
+    return background("utils", lib, s, trashed, hidden) {
         fun e(key: String, icon: ImageVector, title: Int, page: Page) =
             Entry(key, icon, ctx.getString(title), page, vm.pageItems(page, lib, s, trashed, hidden))
         buildList {
@@ -126,7 +143,7 @@ fun utilityEntries(vm: AppViewModel, lib: List<Media>, s: AppSettings): List<Ent
 fun pinnableEntries(vm: AppViewModel, lib: List<Media>, albums: List<Album>, tags: MediaTags, effects: Map<Long, LiveEffect>, s: AppSettings): Map<String, Entry> {
     val types = mediaTypeEntries(lib, tags, effects)
     val utils = utilityEntries(vm, lib, s)
-    return remember(types, utils, albums, lib) {
+    return background("pinnable", types, utils, albums, lib) {
         val m = LinkedHashMap<String, Entry>()
         utils.filter { it.key != "hidden" && it.key != "deleted" }.forEach { m[it.key] = it }
         types.forEach { m[it.key] = it }

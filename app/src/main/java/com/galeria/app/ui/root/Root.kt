@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -185,8 +186,13 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
     val monthsState = rememberLazyListState()
     val yearsState = rememberLazyListState()
     val colState = rememberLazyListState()
-    val months = remember(items, fmt) { monthGroups(items, fmt) }
-    val years = remember(items, fmt, settings.newestFirst) { yearGroups(items, fmt, settings.newestFirst) }
+    // Grouping tens of thousands of photos by month/year happens off the main thread.
+    val months by produceState(remember { monthGroups(items, fmt) }, items, fmt) {
+        value = withContext(Dispatchers.Default) { monthGroups(items, fmt) }
+    }
+    val years by produceState(remember { yearGroups(items, fmt, settings.newestFirst) }, items, fmt, settings.newestFirst) {
+        value = withContext(Dispatchers.Default) { yearGroups(items, fmt, settings.newestFirst) }
+    }
 
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

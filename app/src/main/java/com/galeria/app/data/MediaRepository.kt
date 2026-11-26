@@ -141,11 +141,22 @@ class MediaRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Photos and videos, read from their own collections (like the system gallery does). The combined
+     * "files" table can hide part of the library on some phones, so it isn't used.
+     */
     private fun query(trashed: Boolean): List<Media> {
-        val files = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val out = ArrayList<Media>(8192)
+        queryCollection(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), false, trashed, out)
+        queryCollection(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), true, trashed, out)
+        out.sortWith(compareBy<Media> { it.dateTaken }.thenBy { it.id })
+        return out
+    }
+
+    private fun queryCollection(collection: Uri, video: Boolean, trashed: Boolean, out: ArrayList<Media>) {
         val proj = arrayOf(
             MediaStore.MediaColumns._ID,
-            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.DATE_TAKEN,
             MediaStore.MediaColumns.DATE_ADDED,
@@ -164,16 +175,11 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.CAPTURE_FRAMERATE,
         )
         val args = Bundle().apply {
-            putString(
-                ContentResolver.QUERY_ARG_SQL_SELECTION,
-                "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE},${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"
-            )
             putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, if (trashed) MediaStore.MATCH_ONLY else MediaStore.MATCH_EXCLUDE)
             putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_EXCLUDE)
         }
-        val out = ArrayList<Media>(4096)
-        resolver.query(files, proj, args, null)?.use { c ->
-            val iId = c.getColumnIndexOrThrow(proj[0]); val iType = c.getColumnIndexOrThrow(proj[1])
+        resolver.query(collection, proj, args, null)?.use { c ->
+            val iId = c.getColumnIndexOrThrow(proj[0])
             val iMime = c.getColumnIndexOrThrow(proj[2]); val iTaken = c.getColumnIndexOrThrow(proj[3])
             val iAdded = c.getColumnIndexOrThrow(proj[4]); val iMod = c.getColumnIndexOrThrow(proj[5])
             val iW = c.getColumnIndexOrThrow(proj[6]); val iH = c.getColumnIndexOrThrow(proj[7])
@@ -185,7 +191,6 @@ class MediaRepository(private val context: Context) {
             val iFps = c.getColumnIndex(proj[17])
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
-                val video = c.getInt(iType) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
                 val added = c.getLong(iAdded) * 1000L
                 val modified = c.getLong(iMod) * 1000L
                 var taken = c.getLong(iTaken)
@@ -214,8 +219,6 @@ class MediaRepository(private val context: Context) {
                 )
             }
         }
-        out.sortWith(compareBy<Media> { it.dateTaken }.thenBy { it.id })
-        return out
     }
 
     /** Metadata for a single uri opened from another app (may not be in the library). */
