@@ -1,0 +1,27 @@
+name: Add AI models
+# Adds models to the ai-models pre-release (the app build bundles everything in it).
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/add-models.yml'
+      - '.github/add_models.txt'
+permissions:
+  contents: write
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p add
+          while read -r name url; do
+            [ -z "$name" ] && continue
+            case "$name" in \#*) continue;; esac
+            curl -fL --retry 4 --retry-delay 5 -o "add/$name" "$url"
+          done < .github/add_models.txt
+          ls -la add
+          gh release upload ai-models add/* --clobber
