@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -u
 PKG=com.galeria.app
+# The virtual phone sometimes needs a moment after boot before it answers.
+for i in 1 2 3 4 5 6; do adb wait-for-device; adb shell true >/dev/null 2>&1 && break; sleep 5; done
 # The virtual phone's own apps can be slow; their "not responding" dialogs would cover the screen.
 adb shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 || true
 timeout 300 adb install -r apk/app-release.apk 2>&1 | tail -1

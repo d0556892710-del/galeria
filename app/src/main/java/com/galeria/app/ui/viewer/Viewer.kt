@@ -286,7 +286,7 @@ fun Viewer(
         val m = cur
         if (m != null && !m.isVideo && showPager) {
             kotlinx.coroutines.delay(450)
-            value = runCatching { LiveTextEngine.read(appCtx, m) }.getOrNull()
+            value = runCatching { LiveTextEngine.read(appCtx, m, vm.repo.smart.clip[m.id]) }.getOrNull()
         }
     }
     LaunchedEffect(cur?.id) { liveTextOn = false }
@@ -340,10 +340,10 @@ fun Viewer(
         android.util.Log.i("PhotosPerf", "spatial fill ok=${sharp != null} ms=${System.currentTimeMillis() - t0}")
         if (sharp != null && spatialId == id) spatialBg = sharp
     }
-    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.Depth.release(); com.galeria.app.data.BiRef.release() }.start() } }
+    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.Depth.release() }.start() } }
 
-    // Subject lift: touch and hold the subject; it lifts out with Copy and Share. Google's subject model
-    // finds it at once; BiRefNet then sharpens its outline in the background.
+    // Subject lift: touch and hold the subject; it lifts out with Copy and Share (Google's subject model,
+    // its outline snapped to the photo; SAM when Play services are missing).
     var lifted by remember { mutableStateOf<Pair<Long, com.galeria.app.data.Lift.Cutout>?>(null) }
     var liftBusy by remember { mutableStateOf(false) }
     var liftMenu by remember { mutableStateOf(false) }
@@ -361,18 +361,13 @@ fun Viewer(
         scope.launch {
             val t0 = System.currentTimeMillis()
             val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { SpatialStore.decode(appCtx, m, 2048) }
-            val r = photo?.let { b -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.galeria.app.data.Lift.quick(appCtx, b, nx, ny) } }
+            val r = photo?.let { b -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.galeria.app.data.Lift.subject(appCtx, b, nx, ny) } }
+            photo?.recycle()
             liftBusy = false
             android.util.Log.i("PhotosPerf", "lift quick found=${r != null} ms=${System.currentTimeMillis() - t0}")
-            if (r == null || cur?.id != m.id) { photo?.recycle(); return@launch }
+            if (r == null || cur?.id != m.id) return@launch
             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-            lifted = m.id to r.first
-            if (!r.first.sharp) {
-                val t1 = System.currentTimeMillis()
-                val sharp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.galeria.app.data.Lift.refine(appCtx, r.second) }
-                android.util.Log.i("PhotosPerf", "lift refine ok=${sharp != null} ms=${System.currentTimeMillis() - t1}")
-                if (sharp != null && lifted?.first == m.id) lifted = m.id to sharp
-            }
+            lifted = m.id to r
         }
     }
     fun liftMenuAt(rect: Rect) {

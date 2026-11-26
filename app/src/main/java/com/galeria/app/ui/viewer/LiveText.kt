@@ -36,7 +36,8 @@ object LiveTextEngine {
     private val TEXT_LIKE = setOf("Poster", "Paper", "Menu", "Receipt", "Text", "Font", "Book", "Newspaper", "Handwriting", "Whiteboard", "Sign", "Document", "Screenshot", "Signage", "Calligraphy")
     private val cache = LruCache<String, List<TextBox>>(40)
 
-    suspend fun read(context: Context, m: Media): List<TextBox> = withContext(Dispatchers.IO) {
+    /** [clip] is the photo's point from search (if it was worked out): it tells whether there is writing. */
+    suspend fun read(context: Context, m: Media, clip: FloatArray? = null): List<TextBox> = withContext(Dispatchers.IO) {
         val key = "${m.hiddenFile ?: m.uri}#${m.dateModified}"
         cache.get(key)?.let { return@withContext it }
         val src = m.hiddenFile?.let { ImageDecoder.createSource(File(it)) } ?: ImageDecoder.createSource(context.contentResolver, m.uri)
@@ -70,8 +71,10 @@ object LiveTextEngine {
         // (a sign, a page, a screen), Tesseract looks over the whole photo itself.
         var all = boxes
         if (ocr && hebrew == 0 && System.currentTimeMillis() - t0 < 6000) runCatching {
-            val labels = Tasks.await(labeler.process(InputImage.fromBitmap(bmp, 0))).filter { it.confidence >= .5f }.map { it.text }
-            if (m.isScreenshot || labels.any { it in TEXT_LIKE }) {
+            val labels = Tasks.await(labeler.process(InputImage.fromBitmap(bmp, 0))).filter { it.confidence >= .3f }.map { it.text }
+            val writing = clip?.let { com.galeria.app.data.AutoScene.probs(context, bmp, it)?.get("document") } ?: 0f
+            android.util.Log.i("PhotosPerf", "livetext labels=${labels.take(4)} writing=${"%.2f".format(writing)}")
+            if (m.isScreenshot || labels.any { it in TEXT_LIKE } || writing >= .3f) {
                 val k = minOf(1f, 1600f / max(bmp.width, bmp.height))
                 val page = if (k < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * k).toInt(), (bmp.height * k).toInt(), true) else bmp
                 val found = com.galeria.app.data.HebrewOcr.readPage(context, page)
