@@ -21,7 +21,7 @@ def nodes():
         ns = dump()
         if not any("isn't responding" in t or "isn’t responding" in t for t, d, b in ns): return ns
         for t, d, b in ns:
-            if t.strip() == "Wait" and len(b) == 4: sh(f"input tap {(b[0]+b[2])//2} {(b[1]+b[3])//2}"); print("   (dismissed a system 'not responding' dialog)", flush=True); break
+            if t.strip() == "Close app" and len(b) == 4: sh(f"input tap {(b[0]+b[2])//2} {(b[1]+b[3])//2}"); print("   (closed a system 'not responding' dialog)", flush=True); break
         time.sleep(1.5)
     return dump()
 def find(label):

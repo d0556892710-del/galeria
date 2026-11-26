@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -u
 PKG=com.galeria.app
+# The virtual phone's own apps can be slow; their "not responding" dialogs would cover the screen.
+adb shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 || true
 timeout 300 adb install -r apk/app-release.apk 2>&1 | tail -1
 for p in READ_EXTERNAL_STORAGE ACCESS_MEDIA_LOCATION READ_MEDIA_IMAGES READ_MEDIA_VIDEO POST_NOTIFICATIONS; do adb shell pm grant $PKG android.permission.$p >/dev/null 2>&1 || true; done
 adb shell appops set $PKG MANAGE_MEDIA allow >/dev/null 2>&1 || true
