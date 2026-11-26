@@ -109,9 +109,6 @@ time.sleep(1.5); shot("lift_1_lifted")
 has_menu = find("Copy") is not None
 print("   menu shown:", has_menu, flush=True)
 if not (line and "found=true" in line and has_menu): ok = False
-line = wait_for(r"lift refine ok=\w+ ms=\d+", 150)
-print("  ", line or "NO REFINE", flush=True)
-time.sleep(1); shot("lift_2_refined")
 if tap("Copy"): time.sleep(1); shot("lift_3_copied")
 sh("input keyevent 4"); time.sleep(1.5)
 

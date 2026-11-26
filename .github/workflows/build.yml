@@ -343,13 +343,14 @@ jobs:
           (command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)) >/dev/null 2>&1 || true
           python3 -m pip install --quiet scikit-image pillow numpy
           python3 -c "from skimage import data; from PIL import Image; [Image.fromarray(getattr(data, n)()).convert('RGB').save(n + '.jpg', quality=95) for n in ('coffee', 'astronaut', 'brick')]"
-          # A photo with Hebrew text (drawn right to left by hand: Pillow here has no bidi).
+          # A photo with Hebrew text (Pillow lays it out right to left itself when it has raqm; otherwise by hand).
           python3 -c "
-          from PIL import Image, ImageDraw, ImageFont
+          from PIL import Image, ImageDraw, ImageFont, features
+          rtl = features.check('raqm'); print('raqm', rtl)
           im = Image.new('RGB', (1400, 900), (250, 248, 240)); d = ImageDraw.Draw(im)
           f = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 110)
           for i, line in enumerate(['שלום עולם', 'קפה הפוך']):
-              t = line[::-1]; w = d.textlength(t, font=f); d.text(((1400 - w) / 2, 220 + i * 260), t, fill=(20, 20, 20), font=f)
+              t = line if rtl else line[::-1]; w = d.textlength(t, font=f); d.text(((1400 - w) / 2, 220 + i * 260), t, fill=(20, 20, 20), font=f)
           im.save('hebrew.jpg', quality=95)"
       - name: Enable KVM
         run: |
