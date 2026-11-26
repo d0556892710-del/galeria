@@ -72,10 +72,22 @@ m = sh(f"dumpsys meminfo {PKG}"); tot = re.search(r"TOTAL PSS:\s*(\d+)", m) or r
 print("memory", (int(tot.group(1)) // 1024 if tot else "?"), "MB", "alive" if sh(f"pidof {PKG}").strip() else "DEAD", flush=True)
 
 # ---- Search by meaning: the coffee photo should be found for "espresso cup" ----
+def log(): return adb("logcat", "-d").decode("utf-8", "ignore")
+def wait_for(word, secs):
+    end = time.time() + secs
+    while time.time() < end:
+        if word in log(): return True
+        time.sleep(3)
+    return False
 sh(f"am force-stop {PKG}"); time.sleep(1); adb("logcat", "-c")
-sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1"); time.sleep(25)  # let it understand the photo
+sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1"); time.sleep(6)
 tap("Cancel")
+t1 = time.time(); indexed = wait_for("clip indexed", 150)  # the phone looks at the photos once
+print("indexed" if indexed else "NOT indexed", f"{time.time()-t1:.0f}s", flush=True)
 if tap("Search"):
-    time.sleep(1.5); sh("input text espresso%scup"); time.sleep(8); shot("07_search_espresso_cup")
-lc = adb("logcat", "-d", "-s", "PhotosPerf:I").decode("utf-8", "ignore")
-print("\n".join(l for l in lc.splitlines() if "semantic" in l) or "no semantic search line", flush=True)
+    time.sleep(1.5); sh("input text espresso%scup")
+    t2 = time.time(); got = wait_for("semantic q=", 90)
+    print("search answered" if got else "search NOT answered", f"{time.time()-t2:.0f}s", flush=True)
+    time.sleep(2); shot("07_search_espresso_cup")
+for line in log().splitlines():
+    if "PhotosPerf" in line or " Photos" in line or "FATAL" in line or "AndroidRuntime" in line: print(line[:400], flush=True)

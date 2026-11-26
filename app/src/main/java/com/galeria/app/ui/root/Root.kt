@@ -434,6 +434,10 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                     )
                     else -> {
                         val viewed = remember(lib, settings.viewed) { val m = lib.associateBy { it.id }; settings.viewed.distinct().mapNotNull { m[it] } }
+                        // The words model is made ready while the keyboard comes up.
+                        LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.galeria.app.data.Semantic.warm(ctx) } }
+                        // …and let go of when leaving Search, so the rest of the app stays light.
+                        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.Clip.releaseText() }.start() } }
                         SearchScreen(
                             smart = smartIndex,
                             semantic = { q, l -> com.galeria.app.data.Semantic.search(ctx, q, l, vm.repo.smart.clip) },

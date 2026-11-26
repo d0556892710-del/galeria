@@ -107,6 +107,7 @@ class SmartIndex(private val context: Context) {
             val map = HashMap(_index.value)
             var since = 0
             var power = power(); var checked = 0
+            var clipped = 0; val t0 = System.currentTimeMillis()
             for (m in lib.asReversed()) {
                 if (!isActive) break
                 if (m.isVideo || m.hiddenFile != null) continue
@@ -125,7 +126,7 @@ class SmartIndex(private val context: Context) {
                     map[m.id] = SmartEntry(m.dateModified, labels, text.replace(Regex("\\s+"), " ").take(600))
                 }
                 if (needClip) runCatching { Clip.image(context, bmp) }.onSuccess { v ->
-                    clip[m.id] = v; clipModified[m.id] = m.dateModified
+                    clip[m.id] = v; clipModified[m.id] = m.dateModified; clipped++
                     pendingClip += Triple(m.id, m.dateModified, v)
                     if (pendingClip.size >= 50) flushClip()
                     if (!power.first) delay(150)
@@ -140,6 +141,7 @@ class SmartIndex(private val context: Context) {
             save(map)
             if (clip.keys.any { it !in existing }) compactClip(existing)
             Clip.releaseVision()
+            android.util.Log.i("PhotosPerf", "clip indexed new=$clipped total=${clip.size} on=$clipOn ms=${System.currentTimeMillis() - t0}")
         }
     }
 

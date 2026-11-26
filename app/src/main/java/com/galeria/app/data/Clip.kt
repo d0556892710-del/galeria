@@ -49,13 +49,14 @@ object Clip {
         OrtSession.SessionOptions().apply { setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT); setIntraOpNumThreads(2) },
     ).also { vision = it }
 
-    @Synchronized
+    // The words model has its own lock: a search never runs while it is being let go of.
+    private val textLock = Any()
+
     private fun text(context: Context): OrtSession = text ?: env.createSession(
         file(context, "clip_text.onnx").absolutePath,
         OrtSession.SessionOptions().apply { setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT); setIntraOpNumThreads(Cpu.fastCores) },
     ).also { text = it }
 
-    @Synchronized
     private fun tokenizer(context: Context): ClipTokenizer =
         tokenizer ?: context.assets.open("models/clip_tokenizer.json").use { ClipTokenizer.load(it) }.also { tokenizer = it }
 
@@ -80,9 +81,11 @@ object Clip {
 
     /** Words' point (unit length), in English. */
     fun text(context: Context, query: String): FloatArray {
-        val ids = tokenizer(context).encode(query)
-        OnnxTensor.createTensor(env, LongBuffer.wrap(ids), longArrayOf(1, ids.size.toLong())).use { t ->
-            text(context).run(mapOf("input_ids" to t)).use { r -> return unit((r.get(0) as OnnxTensor).floatBuffer) }
+        synchronized(textLock) {
+            val ids = tokenizer(context).encode(query)
+            OnnxTensor.createTensor(env, LongBuffer.wrap(ids), longArrayOf(1, ids.size.toLong())).use { t ->
+                text(context).run(mapOf("input_ids" to t)).use { r -> return unit((r.get(0) as OnnxTensor).floatBuffer) }
+            }
         }
     }
 
@@ -96,6 +99,8 @@ object Clip {
 
     @Synchronized
     fun releaseVision() { runCatching { vision?.close() }; vision = null }
+
+    fun releaseText() { synchronized(textLock) { runCatching { text?.close() }; text = null } }
 }
 
 /** OpenAI CLIP's byte-level BPE tokenizer (lower-case, 77 tokens, start/end markers). */

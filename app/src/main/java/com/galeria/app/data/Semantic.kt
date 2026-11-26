@@ -38,14 +38,29 @@ object Semantic {
         return runCatching { Tasks.await(t.translate(q), 4, TimeUnit.SECONDS) }.getOrNull()
     }
 
+    private fun skip(why: String): List<Media> { android.util.Log.i("PhotosPerf", "semantic skip $why"); return emptyList() }
+
+    /** Gets the words model ready (when Search opens), so the first search answers at once. */
+    fun warm(context: Context) {
+        if (!Clip.available(context)) return
+        val t0 = System.currentTimeMillis()
+        runCatching { Clip.text(context, "a photo") }
+            .onSuccess { android.util.Log.i("PhotosPerf", "semantic warm ms=${System.currentTimeMillis() - t0}") }
+            .onFailure { android.util.Log.w("Photos", "semantic warm", it) }
+    }
+
     /** Photos of [lib] that match [query], best first (empty if nothing really matches). Runs on a background thread. */
     fun search(context: Context, query: String, lib: List<Media>, index: Map<Long, FloatArray>): List<Media> {
-        if (query.isBlank() || index.isEmpty() || !Clip.available(context)) return emptyList()
+        if (query.isBlank()) return emptyList()
+        if (!Clip.available(context)) return skip("no model")
+        if (index.isEmpty()) return skip("nothing indexed yet")
         // Dates and numbers are better served by the normal search.
         if (query.trim().all { it.isDigit() || it.isWhitespace() }) return emptyList()
-        val en = english(context, query)?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
+        val en = english(context, query)?.trim()?.takeIf { it.isNotEmpty() } ?: return skip("no translation")
         val prompt = if (en.split(' ').size <= 3) "a photo of $en" else en
-        val q = runCatching { Clip.text(context, prompt) }.getOrNull() ?: return emptyList()
+        val t0 = System.currentTimeMillis()
+        val q = runCatching { Clip.text(context, prompt) }.onFailure { android.util.Log.w("Photos", "semantic text", it) }.getOrNull()
+            ?: return skip("text model failed")
         val scored = ArrayList<Pair<Media, Float>>()
         for (m in lib) {
             val v = index[m.id] ?: continue
@@ -57,7 +72,7 @@ object Semantic {
         val best = scored.maxOf { it.second }
         val cut = max(0.205f, best - 0.075f)
         val hits = scored.filter { it.second >= cut }.sortedByDescending { it.second }.take(600).map { it.first }
-        android.util.Log.i("PhotosPerf", "semantic q=\"$prompt\" indexed=${scored.size} best=${"%.3f".format(best)} hits=${hits.size}")
+        android.util.Log.i("PhotosPerf", "semantic q=\"$prompt\" indexed=${scored.size} best=${"%.3f".format(best)} hits=${hits.size} ms=${System.currentTimeMillis() - t0}")
         return hits
     }
 }
