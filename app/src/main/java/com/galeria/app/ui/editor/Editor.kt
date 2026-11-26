@@ -177,6 +177,17 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         val av = withContext(Dispatchers.Default) { runCatching { EditRender.autoVector(sm) }.getOrDefault(List(Tool.entries.size) { 0f }) }
         params = params.copy(autoVec = av)
         initial = initial.copy(autoVec = av)
+        // Then Auto learns what kind of photo it is (from search's point for it, when there is one).
+        val smart = withContext(Dispatchers.Default) {
+            val scene = com.galeria.app.data.AutoScene.probs(ctx, sm, repo.smart.clip[m.id]) ?: return@withContext null
+            android.util.Log.i("PhotosPerf", "auto scene " + scene.entries.sortedByDescending { it.value }.take(3).joinToString { "${it.key}=${"%.2f".format(it.value)}" })
+            runCatching { EditRender.autoVector(sm, scene) }.getOrNull()
+        }
+        if (smart != null) {
+            // The photo's own Auto amount stays as it was; only what Auto means for it is refined.
+            if (params.autoVec == av) params = params.copy(autoVec = smart)
+            if (initial.autoVec == av) initial = initial.copy(autoVec = smart)
+        }
     }
     LaunchedEffect(isLive) {
         if (!isLive) return@LaunchedEffect

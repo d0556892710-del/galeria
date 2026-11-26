@@ -32,6 +32,8 @@ data class TextBox(val text: String, val l: Float, val t: Float, val r: Float, v
 /** Live Text: reads text in the photo on the device. */
 object LiveTextEngine {
     private val reader by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+    private val labeler by lazy { com.google.mlkit.vision.label.ImageLabeling.getClient(com.google.mlkit.vision.label.defaults.ImageLabelerOptions.DEFAULT_OPTIONS) }
+    private val TEXT_LIKE = setOf("Poster", "Paper", "Menu", "Receipt", "Text", "Font", "Book", "Newspaper", "Handwriting", "Whiteboard", "Sign", "Document", "Screenshot", "Signage", "Calligraphy")
     private val cache = LruCache<String, List<TextBox>>(40)
 
     suspend fun read(context: Context, m: Media): List<TextBox> = withContext(Dispatchers.IO) {
@@ -64,10 +66,28 @@ object LiveTextEngine {
             }.onFailure { android.util.Log.w("Photos", "hebrew ocr", it) }
             TextBox(text, r.left / w, r.top / h, r.right / w, r.bottom / h)
         }
-        android.util.Log.i("PhotosPerf", "livetext blocks=${boxes.size} hebrew=$hebrew ms=${System.currentTimeMillis() - t0}")
+        // Google's reader doesn't even see Hebrew-only text: if the photo looks like it has writing on it
+        // (a sign, a page, a screen), Tesseract looks over the whole photo itself.
+        var all = boxes
+        if (ocr && hebrew == 0 && System.currentTimeMillis() - t0 < 6000) runCatching {
+            val labels = Tasks.await(labeler.process(InputImage.fromBitmap(bmp, 0))).filter { it.confidence >= .5f }.map { it.text }
+            if (m.isScreenshot || labels.any { it in TEXT_LIKE }) {
+                val k = minOf(1f, 1600f / max(bmp.width, bmp.height))
+                val page = if (k < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * k).toInt(), (bmp.height * k).toInt(), true) else bmp
+                val found = com.galeria.app.data.HebrewOcr.readPage(context, page)
+                val pw = page.width.toFloat(); val ph = page.height.toFloat()
+                if (page !== bmp) page.recycle()
+                val extra = found.filter { (t, _) -> com.galeria.app.data.HebrewOcr.hebrewShare(t) >= .3f && t.count { it in '\u05D0'..'\u05EA' } >= 2 }
+                    .map { (t, r) -> TextBox(t, r.left / pw, r.top / ph, r.right / pw, r.bottom / ph) }
+                    .filter { e -> boxes.none { b -> e.l < b.r && b.l < e.r && e.t < b.b && b.t < e.b } }
+                hebrew += extra.size
+                all = boxes + extra
+            }
+        }.onFailure { android.util.Log.w("Photos", "hebrew page", it) }
+        android.util.Log.i("PhotosPerf", "livetext blocks=${all.size} hebrew=$hebrew ms=${System.currentTimeMillis() - t0}")
         bmp.recycle()
-        cache.put(key, boxes)
-        boxes
+        cache.put(key, all)
+        all
     }
 }
 

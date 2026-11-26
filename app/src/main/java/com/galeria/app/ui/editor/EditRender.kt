@@ -329,18 +329,25 @@ object EditRender {
 
     // ------------------------------------------------------------------ auto
 
-    /** What the magic wand does for this photo, from its luminance histogram. */
-    fun autoVector(small: Bitmap): List<Float> {
+    /**
+     * What the magic wand does for this photo: from its tones and colour cast, and — when [scene] is known —
+     * from what kind of photo it is (a sunset keeps its warmth, a night stays dark, food gets richer…).
+     */
+    fun autoVector(small: Bitmap, scene: Map<String, Float>? = null): List<Float> {
         val b = if (small.config == Bitmap.Config.HARDWARE) small.copy(Bitmap.Config.ARGB_8888, false) else small
         val w = b.width; val h = b.height
         val px = IntArray(w * h)
         b.getPixels(px, 0, w, 0, 0, w, h)
         val hist = IntArray(256)
         var satSum = 0f
+        // Colour cast, measured on the mid-tones (not on blown highlights or deep shadows).
+        var mr = 0.0; var mg = 0.0; var mb = 0.0; var mn = 0
         for (c in px) {
             val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
-            hist[((r * 54 + g * 183 + bl * 19) shr 8).coerceIn(0, 255)]++
+            val y = ((r * 54 + g * 183 + bl * 19) shr 8).coerceIn(0, 255)
+            hist[y]++
             satSum += (max(r, max(g, bl)) - min(r, min(g, bl))) / 255f
+            if (y in 40..225) { mr += r; mg += g; mb += bl; mn++ }
         }
         val n = px.size.coerceAtLeast(1)
         fun pct(q: Float): Float {
@@ -360,6 +367,31 @@ object EditRender {
         v[Tool.BlackPoint.ordinal] = if (p02 > .07f) .12f else .03f
         v[Tool.Vibrance.ordinal] = if (meanSat < .25f) .18f else .08f
         v[Tool.Saturation.ordinal] = .04f
+        fun p(k: String) = scene?.get(k) ?: 0f
+        // Half of a colour cast is taken out (a sunset or lamp-lit room keeps its warmth).
+        if (mn > 50) {
+            val avg = ((mr + mg + mb) / (3.0 * mn)).toFloat().coerceAtLeast(1f)
+            val keepWarm = (p("sunset") + p("indoor") * .6f).coerceIn(0f, 1f)
+            val blue = ((mb - mr) / mn).toFloat() / avg
+            val green = ((mg - (mr + mb) / 2.0) / mn).toFloat() / avg
+            v[Tool.Warmth.ordinal] = (blue * 1.4f * (if (blue < 0f) 1f - keepWarm else 1f)).coerceIn(-.25f, .25f)
+            v[Tool.Tint.ordinal] = (green * 1.6f).coerceIn(-.2f, .2f)
+        }
+        if (scene != null) {
+            // What a photo editor does for each kind of photo, in proportion to how sure the model is.
+            fun add(t: Tool, d: Float) { v[t.ordinal] += d }
+            p("night").let { k -> add(Tool.Exposure, -.18f * k); add(Tool.Shadows, -.12f * k); add(Tool.BlackPoint, .08f * k); add(Tool.Vibrance, .06f * k) }
+            p("sunset").let { k -> add(Tool.Warmth, .1f * k); add(Tool.Highlights, -.12f * k); add(Tool.Saturation, .06f * k); add(Tool.Exposure, -.06f * k) }
+            p("snow").let { k -> add(Tool.Exposure, .14f * k); add(Tool.Warmth, -.04f * k); add(Tool.Highlights, -.06f * k) }
+            p("beach").let { k -> add(Tool.Exposure, .05f * k); add(Tool.Vibrance, .1f * k); add(Tool.Warmth, .03f * k) }
+            p("food").let { k -> add(Tool.Vibrance, .12f * k); add(Tool.Warmth, .06f * k); add(Tool.Definition, .08f * k); add(Tool.Sharpness, .06f * k) }
+            p("portrait").let { k -> add(Tool.Saturation, -.04f * k); add(Tool.Vibrance, -.03f * k); add(Tool.Shadows, .06f * k); add(Tool.Warmth, .02f * k) }
+            p("landscape").let { k -> add(Tool.Vibrance, .1f * k); add(Tool.Definition, .1f * k); add(Tool.Contrast, .04f * k) }
+            p("indoor").let { k -> add(Tool.Exposure, .05f * k); add(Tool.Shadows, .05f * k) }
+            p("document").let { k -> add(Tool.Contrast, .15f * k); add(Tool.Brightness, .1f * k); add(Tool.Saturation, -.2f * k); add(Tool.BlackPoint, .1f * k); add(Tool.Definition, .1f * k) }
+            p("backlit").let { k -> add(Tool.Shadows, .2f * k); add(Tool.Highlights, -.15f * k); add(Tool.Exposure, .05f * k) }
+            for (t in Tool.entries) if (t != Tool.Auto) v[t.ordinal] = v[t.ordinal].coerceIn(t.min, 1f) * 1f
+        }
         return v
     }
 

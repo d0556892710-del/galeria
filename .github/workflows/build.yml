@@ -13,6 +13,8 @@ on:
       - '.github/add_models.txt'
       - '.github/workflows/patch-models.yml'
       - '.github/patch_clip.py'
+      - '.github/workflows/auto-scenes.yml'
+      - '.github/auto_scenes.py'
   pull_request:
     branches: [ main ]
   workflow_dispatch:

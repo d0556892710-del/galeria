@@ -49,6 +49,30 @@ object HebrewOcr {
         return t.trim()
     }
 
+    /** Text blocks found anywhere in [page] (Tesseract's own layout analysis), with their boxes in its pixels. */
+    @Synchronized
+    fun readPage(context: Context, page: Bitmap): List<Pair<String, android.graphics.Rect>> {
+        val a = api(context)
+        a.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
+        a.setImage(page)
+        a.getUTF8Text()
+        val out = ArrayList<Pair<String, android.graphics.Rect>>()
+        val it = a.resultIterator
+        if (it != null) {
+            val level = TessBaseAPI.PageIteratorLevel.RIL_BLOCK
+            it.begin()
+            do {
+                val t = it.getUTF8Text(level)?.trim().orEmpty()
+                val r = it.getBoundingRect(level)
+                if (t.isNotEmpty() && r != null && r.width() > 4 && r.height() > 4) out += t to r
+            } while (it.next(level))
+            it.delete()
+        }
+        a.clear()
+        a.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK)
+        return out
+    }
+
     @Synchronized
     fun release() { runCatching { api?.recycle() }; api = null }
 

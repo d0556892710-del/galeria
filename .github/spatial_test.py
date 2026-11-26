@@ -44,7 +44,14 @@ def media_id(name):
     q = sh("content query --uri content://media/external/images/media --projection _id:_display_name")
     return next((re.search(r"_id=(\d+)", l).group(1) for l in q.splitlines() if name in l), None)
 def open_photo(mid):
-    sh(f"am start -a android.intent.action.VIEW -d content://media/external/images/media/{mid} -t image/jpeg -n {PKG}/.MainActivity")
+    # Opens the photo in the app's viewer; if the phone shows something else, tries again once.
+    for attempt in range(2):
+        sh(f"am start -a android.intent.action.VIEW -d content://media/external/images/media/{mid} -t image/jpeg -n {PKG}/.MainActivity")
+        time.sleep(3)
+        if find("Edit") is not None or find("Share") is not None: return True
+        print("   (viewer not showing, opening again)", flush=True)
+        sh(f"am force-stop {PKG}"); time.sleep(1)
+    return False
 
 sh(f"am force-stop {PKG}"); adb("logcat", "-c")
 sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1"); time.sleep(8)
