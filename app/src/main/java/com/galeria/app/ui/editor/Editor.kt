@@ -191,6 +191,19 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         }
     }
     DisposableEffect(live) { val s = live; onDispose { s?.release() } }
+    // The Clean Up models are big: free them when the editor closes.
+    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.LaMa.release() }.start() } }
+    // Clean Up works on the full-resolution picture so what's filled in is as sharp as the rest.
+    var fullForClean by remember { mutableStateOf<Pair<Long, Bitmap>?>(null) }
+    suspend fun cleanSource(pp: EditParams, fallback: Bitmap): Bitmap {
+        val key = pp.keyUs
+        val base = fullForClean?.takeIf { it.first == key }?.second ?: run {
+            val b = if (key >= 0) withContext(Dispatchers.IO) { live?.frame(key, 6144) } else edits.decodeFull(m)
+            (b ?: fallback).also { fullForClean = key to it }
+        }
+        if (pp.cleanups.isEmpty()) return base
+        return withContext(Dispatchers.Default) { CleanUp.apply(base.copy(Bitmap.Config.ARGB_8888, true), pp.cleanups) }
+    }
     LaunchedEffect(live) {
         val s = live ?: return@LaunchedEffect
         snapshotFlow { scrubUs to scrubbing }.conflate().collect { (us, active) ->
@@ -328,7 +341,8 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                                 val pp = params
                                 cleanBusy = true
                                 scope.launch {
-                                    val patch = withContext(Dispatchers.Default) { CleanUp.remove(ctx, base, pp, pts, CleanUp.BRUSH) }
+                                    val src = runCatching { cleanSource(pp, base) }.getOrDefault(base)
+                                    val patch = withContext(Dispatchers.Default) { CleanUp.remove(ctx, src, pp, pts, CleanUp.BRUSH) }
                                     if (patch != null) { params = params.copy(cleanups = params.cleanups + patch); cleanRedo.clear() }
                                     cleanBusy = false
                                 }

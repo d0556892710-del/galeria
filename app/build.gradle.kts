@@ -31,6 +31,8 @@ android {
 
     androidResources {
         generateLocaleConfig = false
+        // The AI models are stored as-is so they can be copied out quickly.
+        noCompress += listOf("onnx")
     }
 
     buildTypes {
@@ -87,6 +89,8 @@ dependencies {
     // On-device vision (bundled models, works offline): content search, Live Text, faces.
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    // On-device AI models (Clean Up with LaMa).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
     implementation(libs.androidx.exifinterface)
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

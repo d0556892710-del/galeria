@@ -12,3 +12,7 @@
 -keep class androidx.media3.effect.** { *; }
 -keep class androidx.media3.transformer.** { *; }
 -dontwarn androidx.media3.**
+
+# ONNX Runtime (JNI)
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**

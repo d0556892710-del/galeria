@@ -48,6 +48,14 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
+      - name: Bundle the on-device AI models
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p app/src/main/assets/models
+          gh release download ai-models -p 'lama_*.onnx' -D app/src/main/assets/models --clobber || echo "models not available: Clean Up falls back to the classic fill"
+          ls -la app/src/main/assets/models
+
       - name: Build release APK
         run: |
           set -o pipefail
