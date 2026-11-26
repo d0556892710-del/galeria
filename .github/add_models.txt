@@ -1,4 +1,2 @@
-# name url  (MobileCLIP2-S2, Apple; CLIP tokenizer)
-clip_vision.onnx https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/vision_model.onnx
-clip_text.onnx https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/text_model.onnx
-clip_tokenizer.json https://huggingface.co/Xenova/mobileclip_s2/resolve/main/tokenizer.json
+# name url  (Depth Anything V2 Small, Apache-2.0: Spatial Scenes and Portrait)
+depth_small.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
