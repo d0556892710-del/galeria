@@ -62,7 +62,8 @@ object Depth {
     @Synchronized
     private fun session(context: Context): OrtSession = session ?: env.createSession(
         file(context).absolutePath,
-        OrtSession.SessionOptions().apply { setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT); setIntraOpNumThreads(Cpu.fastCores) },
+        // Two threads: it runs while photos are being swiped, and the screen must stay smooth.
+        OrtSession.SessionOptions().apply { setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT); setIntraOpNumThreads(minOf(2, Cpu.fastCores)) },
     ).also { session = it }
 
     @Synchronized
