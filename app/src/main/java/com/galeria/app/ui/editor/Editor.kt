@@ -89,6 +89,8 @@ import com.galeria.app.ui.theme.Type
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -192,7 +194,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
     }
     DisposableEffect(live) { val s = live; onDispose { s?.release() } }
     // The Clean Up models are big: free them when the editor closes.
-    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.LaMa.release() }.start() } }
+    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.LaMa.release(); com.galeria.app.data.Sam.release() }.start() } }
     // Clean Up works on the full-resolution picture so what's filled in is as sharp as the rest.
     var fullForClean by remember { mutableStateOf<Pair<Long, Bitmap>?>(null) }
     suspend fun cleanSource(pp: EditParams, fallback: Bitmap): Bitmap {
@@ -203,6 +205,21 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         }
         if (pp.cleanups.isEmpty()) return base
         return withContext(Dispatchers.Default) { CleanUp.apply(base.copy(Bitmap.Config.ARGB_8888, true), pp.cleanups) }
+    }
+    // The selection model looks at the picture as soon as Clean Up opens, so picking an object is instant.
+    var samJob by remember { mutableStateOf<kotlinx.coroutines.Deferred<com.galeria.app.data.Sam.Embedding?>?>(null) }
+    var cleanRev by remember { mutableStateOf(0) }
+    var refineJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var cleanHighlight by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(cleaning) {
+        if (!cleaning) return@LaunchedEffect
+        val base0 = original ?: return@LaunchedEffect
+        if (samJob == null && com.galeria.app.data.Sam.available(ctx)) samJob = scope.async(Dispatchers.Default) {
+            runCatching { com.galeria.app.data.Sam.embed(ctx, cleanSource(params.copy(cleanups = emptyList()), base0)) }
+                .onFailure { android.util.Log.w("Photos", "selection model", it) }.getOrNull()
+        }
+        // Warm up the fill model too (first use copies it out of the app).
+        launch(Dispatchers.IO) { runCatching { com.galeria.app.data.LaMa.available(ctx) } }
     }
     LaunchedEffect(live) {
         val s = live ?: return@LaunchedEffect
@@ -217,7 +234,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
     val editBase0: Bitmap? = if (params.keyUs >= 0) keyFrame ?: original else original
     // Clean Up patches laid over the original (computed off the main thread).
     var cleanBase by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(editBase0, params.cleanups) {
+    LaunchedEffect(editBase0, params.cleanups, cleanRev) {
         val b = editBase0
         cleanBase = if (b == null || params.cleanups.isEmpty()) null else withContext(Dispatchers.Default) {
             CleanUp.apply(if (b.isMutable) b.copy(Bitmap.Config.ARGB_8888, true) else b, params.cleanups)
@@ -260,6 +277,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         saving = true
         val pp = params
         scope.launch {
+            refineJob?.join()
             val bytes = runCatching { buildBytes(pp) }.getOrNull()
             if (bytes == null) {
                 saving = false; overlays.toast(ctx.getString(R.string.edit_failed)); return@launch
@@ -335,15 +353,30 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                                 },
                         )
                         if (cleaning && !comparing) CleanUpLayer(
-                            b, params, enabled = !cleanBusy,
+                            b, params, enabled = !cleanBusy, highlight = cleanHighlight,
                             onStroke = { pts ->
                                 val base = b
                                 val pp = params
                                 cleanBusy = true
                                 scope.launch {
                                     val src = runCatching { cleanSource(pp, base) }.getOrDefault(base)
-                                    val patch = withContext(Dispatchers.Default) { CleanUp.remove(ctx, src, pp, pts, CleanUp.BRUSH) }
-                                    if (patch != null) { params = params.copy(cleanups = params.cleanups + patch); cleanRedo.clear() }
+                                    val emb = samJob?.let { j -> withTimeoutOrNull(30_000) { j.await() } }
+                                    val target = withContext(Dispatchers.Default) { CleanUp.target(ctx, src, pp, pts, CleanUp.BRUSH, emb) }
+                                    cleanHighlight = target.objMask
+                                    // Quick result first (fast model), then a sharper one in the background for big objects.
+                                    val patch = withContext(Dispatchers.Default) { CleanUp.fill(ctx, src, target, 512, timeoutMs = 45_000) }
+                                    cleanHighlight = null
+                                    if (patch != null) {
+                                        params = params.copy(cleanups = params.cleanups + patch); cleanRedo.clear()
+                                        if (CleanUp.wantsRefine(ctx, target)) {
+                                            val prev = refineJob
+                                            refineJob = scope.launch(Dispatchers.Default) {
+                                                prev?.join()
+                                                val ok = CleanUp.fill(ctx, src, target, 1024, into = java.io.File(patch.file), timeoutMs = 120_000) != null
+                                                if (ok) withContext(Dispatchers.Main) { cleanRev++ }
+                                            }
+                                        }
+                                    } else overlays.toast(ctx.getString(R.string.edit_failed))
                                     cleanBusy = false
                                 }
                             },

@@ -41,6 +41,7 @@ object LaMa {
     private fun session(context: Context, size: Int): OrtSession = sessions.getOrPut(size) {
         val opts = OrtSession.SessionOptions().apply {
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            setIntraOpNumThreads(Cpu.fastCores)
         }
         env.createSession(file(context, size).absolutePath, opts)
     }
@@ -56,7 +57,7 @@ object LaMa {
      * Fills [hole] (true = remove) in a [size]×[size] picture. [img] must be size×size, software ARGB.
      * Returns the model's picture (same size).
      */
-    fun inpaint(context: Context, size: Int, img: Bitmap, hole: BooleanArray): Bitmap {
+    fun inpaint(context: Context, size: Int, img: Bitmap, hole: BooleanArray, timeoutMs: Long = 0): Bitmap {
         val n = size * size
         val px = IntArray(n).also { img.getPixels(it, 0, size, 0, 0, size, size) }
         val image = FloatBuffer.allocate(3 * n)
@@ -73,7 +74,13 @@ object LaMa {
         val out = IntArray(n)
         OnnxTensor.createTensor(env, image, shape).use { ti ->
             OnnxTensor.createTensor(env, mask, longArrayOf(1, 1, size.toLong(), size.toLong())).use { tm ->
-                s.run(mapOf("image" to ti, "mask" to tm)).use { res ->
+                OrtSession.RunOptions().use { ro ->
+                // A watchdog: past the time limit the model is stopped (the caller then falls back).
+                val watchdog = if (timeoutMs > 0) Thread {
+                    try { Thread.sleep(timeoutMs); ro.setTerminate(true) } catch (_: InterruptedException) {}
+                }.apply { isDaemon = true; start() } else null
+                val result = try { s.run(mapOf("image" to ti, "mask" to tm), ro) } finally { watchdog?.interrupt() }
+                result.use { res ->
                     val fb = (res.get(0) as OnnxTensor).floatBuffer
                     // Output is 0…1 (or 0…255 in some exports).
                     var mx = 0f
@@ -85,6 +92,7 @@ object LaMa {
                         val b = (fb.get(2 * n + i) * k).toInt().coerceIn(0, 255)
                         out[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
                     }
+                }
                 }
             }
         }

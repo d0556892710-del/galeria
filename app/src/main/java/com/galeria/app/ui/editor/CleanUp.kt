@@ -24,12 +24,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
 import androidx.compose.ui.input.pointer.pointerInput
 import com.galeria.app.data.Inpaint
 import com.galeria.app.data.LaMa
+import com.galeria.app.data.Sam
 import java.io.File
 import java.util.UUID
 import kotlin.math.max
@@ -55,12 +59,21 @@ object CleanUp {
         return out
     }
 
+    /** What a Clean Up gesture points at, in the picture's own pixels. */
+    class Target(
+        /** The object found by the selection model (opaque = object), drawn over the whole picture; or null. */
+        val objMask: Bitmap?,
+        val path: android.graphics.Path, val inv: Matrix, val ow: Float, val brushPx: Float, val lasso: Boolean,
+        val minX: Float, val minY: Float, val maxX: Float, val maxY: Float,
+    ) {
+        val side get() = max(maxX - minX, maxY - minY)
+    }
+
     /**
-     * Removes what was brushed over, or everything inside a circle drawn around it (like iPhone).
-     * [src] is the picture to clean at full resolution; [points] are x,y pairs in 0…1 of the edited
-     * picture (as shown). Returns a patch in the original's coordinates, at full resolution.
+     * Works out what to remove: tapping or circling picks the whole object (and only it) with the
+     * selection model, like iPhone; brushing removes exactly what was brushed.
      */
-    fun remove(context: Context, src: Bitmap, p: EditParams, points: List<Float>, brush: Float): CleanPatch? = runCatching {
+    fun target(context: Context, src: Bitmap, p: EditParams, points: List<Float>, brush: Float, sam: Sam.Embedding?): Target {
         val w = src.width.toFloat(); val h = src.height.toFloat()
         val (bw, bh) = EditRender.baseSize(p, w, h)
         val (ow, oh) = EditRender.outputSize(p, w, h)
@@ -71,30 +84,56 @@ object CleanUp {
         var i = 2
         while (i + 1 < points.size) { path.lineTo(points[i] * ow, points[i + 1] * oh); i += 2 }
         if (points.size == 2) path.lineTo(points[0] * ow + 1f, points[1] * oh + 1f)
-        val lasso = isLoop(points, ow, oh, brush * ow)
-        // Bounds of what's removed, in the original's pixels.
+        val brushPx = brush * ow
+        val lasso = isLoop(points, ow, oh, brushPx)
         val pts = FloatArray(points.size) { k -> if (k % 2 == 0) points[k] * ow else points[k] * oh }
         inv.mapPoints(pts)
-        val rad = inv.mapRadius(brush * ow / 2f) + 2f
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
         for (k in pts.indices step 2) { minX = min(minX, pts[k]); maxX = max(maxX, pts[k]); minY = min(minY, pts[k + 1]); maxY = max(maxY, pts[k + 1]) }
-        minX -= rad; minY -= rad; maxX += rad; maxY += rad
-        val objSide = max(maxX - minX, maxY - minY)
+        val rad = inv.mapRadius(brushPx / 2f) + 2f
+        val tap = max(maxX - minX, maxY - minY) < rad * 1.2f
+        // The selection model: the object in the circle, or under the finger.
+        val obj = if (sam != null && (lasso || tap)) runCatching {
+            if (lasso) Sam.select(context, sam, box = floatArrayOf(minX, minY, maxX, maxY))
+            else Sam.select(context, sam, point = floatArrayOf((minX + maxX) / 2f, (minY + maxY) / 2f))
+        }.onFailure { android.util.Log.w("Photos", "selection", it) }.getOrNull() else null
+        if (obj != null) {
+            // Bounds of the object, in the picture's pixels.
+            val ow2 = obj.width; val oh2 = obj.height
+            val a = IntArray(ow2 * oh2).also { obj.getPixels(it, 0, ow2, 0, 0, ow2, oh2) }
+            var l = ow2; var t = oh2; var r = -1; var b = -1
+            for (y in 0 until oh2) for (x in 0 until ow2) if ((a[y * ow2 + x] ushr 24) > 127) {
+                if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y
+            }
+            if (r >= l && b >= t) {
+                val fx = w / ow2; val fy = h / oh2
+                return Target(obj, path, inv, ow, brushPx, lasso, l * fx - rad, t * fy - rad, (r + 1) * fx + rad, (b + 1) * fy + rad)
+            }
+        }
+        return Target(null, path, inv, ow, brushPx, lasso, minX - rad, minY - rad, maxX + rad, maxY + rad)
+    }
 
+    /** Is a sharper second pass worth it (big object, and the big model is there)? */
+    fun wantsRefine(context: Context, t: Target): Boolean = t.side * 1.6f + 64f > 640f && 1024 in LaMa.available(context)
+
+    /**
+     * Fills in [t] with LaMa: [model] 512 (fast) or 1024 (sharp, for big objects). Writes the patch to
+     * [into] (or a new file). Falls back to the classic fill when the model can't run.
+     */
+    fun fill(context: Context, src: Bitmap, t: Target, model: Int = 512, into: File? = null, timeoutMs: Long = 0): CleanPatch? = runCatching {
+        val w = src.width.toFloat(); val h = src.height.toFloat()
         val sizes = LaMa.available(context)
-        if (sizes.isEmpty()) return@runCatching removeClassic(context, src, inv, path, ow, brush, lasso, minX, minY, maxX, maxY)
+        if (model !in sizes) return@runCatching removeClassic(context, src, t)
 
-        // Choose the model and the area around the object to work on (the model needs to see surroundings).
-        val want = objSide * 1.6f + 64f
-        val model = if (want <= 640f || 1024 !in sizes) sizes.first() else 1024
+        // The area around the object the model sees (it needs the surroundings), at most `model` px.
+        val want = t.side * 1.6f + 64f
         val side = max(want, model.toFloat()).coerceAtMost(max(w, h)).roundToInt()
-        val cx = (minX + maxX) / 2f; val cy = (minY + maxY) / 2f
+        val cx = (t.minX + t.maxX) / 2f; val cy = (t.minY + t.maxY) / 2f
         val cw = min(side, src.width); val ch = min(side, src.height)
         val rl = (cx - cw / 2f).roundToInt().coerceIn(0, src.width - cw)
         val rt = (cy - ch / 2f).roundToInt().coerceIn(0, src.height - ch)
         val sq = max(cw, ch)
 
-        // The picture area, padded to a square by repeating its edges, then sized for the model.
         val soft = if (src.config == Bitmap.Config.HARDWARE) src.copy(Bitmap.Config.ARGB_8888, false) else src
         val region = Bitmap.createBitmap(soft, rl, rt, cw, ch)
         val square = Bitmap.createBitmap(sq, sq, Bitmap.Config.ARGB_8888)
@@ -103,31 +142,35 @@ object CleanUp {
         })
         val input = Bitmap.createScaledBitmap(square, model, model, true)
 
-        // What to remove, drawn at the model's size.
+        // What to remove, at the model's size.
         val maskBmp = Bitmap.createBitmap(model, model, Bitmap.Config.ALPHA_8)
         val k = model.toFloat() / sq
         Canvas(maskBmp).apply {
-            scale(k, k); translate(-rl.toFloat(), -rt.toFloat()); concat(inv)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-            if (lasso) drawPath(android.graphics.Path(path).apply { close() }, paint.apply { style = Paint.Style.FILL })
-            drawPath(path, paint.apply { style = Paint.Style.STROKE; strokeWidth = brush * ow })
+            scale(k, k); translate(-rl.toFloat(), -rt.toFloat())
+            if (t.objMask != null) {
+                drawBitmap(t.objMask, null, RectF(0f, 0f, w, h), Paint(Paint.FILTER_BITMAP_FLAG))
+            } else {
+                concat(t.inv)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+                if (t.lasso) drawPath(android.graphics.Path(t.path).apply { close() }, paint.apply { style = Paint.Style.FILL })
+                drawPath(t.path, paint.apply { style = Paint.Style.STROKE; strokeWidth = t.brushPx })
+            }
         }
         val mp = IntArray(model * model).also { maskBmp.getPixels(it, 0, model, 0, 0, model, model) }
         var hole = BooleanArray(model * model) { (mp[it] ushr 24) > 24 }
         // A little extra around the edges, so no outline or shadow is left behind.
-        repeat(max(2, (model * .008f).roundToInt())) { hole = dilate(hole, model, model) }
+        repeat(max(2, (model * (if (t.objMask != null) .012f else .008f)).roundToInt())) { hole = dilate(hole, model, model) }
         if (hole.none { it }) return@runCatching null
 
         val t0 = android.os.SystemClock.elapsedRealtime()
         val filled = try {
-            LaMa.inpaint(context, model, input, hole)
-        } catch (t: Throwable) {
-            // The model couldn't run (memory, unsupported phone…): use the classic fill instead.
-            android.util.Log.w("Photos", "LaMa failed, classic fill", t)
+            LaMa.inpaint(context, model, input, hole, timeoutMs)
+        } catch (e: Throwable) {
+            android.util.Log.w("Photos", "LaMa failed, classic fill", e)
             listOf(region, square, input, maskBmp).forEach { if (it !== src) runCatching { it.recycle() } }
-            return@runCatching removeClassic(context, src, inv, path, ow, brush, lasso, minX, minY, maxX, maxY)
+            return@runCatching if (into == null) removeClassic(context, src, t) else null
         }
-        android.util.Log.i("PhotosPerf", "cleanup model=$model area=$sq lasso=$lasso ms=${android.os.SystemClock.elapsedRealtime() - t0}")
+        android.util.Log.i("PhotosPerf", "cleanup model=$model area=$sq object=${t.objMask != null} lasso=${t.lasso} ms=${android.os.SystemClock.elapsedRealtime() - t0}")
 
         // Soft edge: fully replaced inside, blending out over a few pixels.
         val holeBmp = Bitmap.createBitmap(IntArray(model * model) { if (hole[it]) -0x1000000 else 0 }, model, model, Bitmap.Config.ARGB_8888)
@@ -140,9 +183,10 @@ object CleanUp {
         }
         val patchSq = Bitmap.createScaledBitmap(Bitmap.createBitmap(fp, model, model, Bitmap.Config.ARGB_8888), sq, sq, true)
         val patch = Bitmap.createBitmap(patchSq, 0, 0, cw, ch)
-        val dir = File(context.filesDir, "cleanup").apply { mkdirs() }
-        val f = File(dir, UUID.randomUUID().toString() + ".png")
-        f.outputStream().use { patch.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val f = into ?: File(File(context.filesDir, "cleanup").apply { mkdirs() }, UUID.randomUUID().toString() + ".png")
+        val tmp = File(f.parentFile, f.name + ".tmp")
+        tmp.outputStream().use { patch.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        tmp.renameTo(f)
         listOf(region, square, input, maskBmp, filled, holeBmp, blur, patchSq, patch).forEach { if (it !== src) runCatching { it.recycle() } }
         if (soft !== src) soft.recycle()
         CleanPatch(f.absolutePath, rl / w, rt / h, (rl + cw) / w, (rt + ch) / h)
@@ -165,18 +209,19 @@ object CleanUp {
         return kotlin.math.hypot(dx, dy) < max(bw, bh) * .35f + brushPx
     }
 
-    /** The previous fill (no model bundled): patch-based, from the surroundings. */
-    private fun removeClassic(
-        context: Context, src: Bitmap, inv: Matrix, path: android.graphics.Path, ow: Float, brush: Float, lasso: Boolean,
-        minX0: Float, minY0: Float, maxX0: Float, maxY0: Float,
-    ): CleanPatch? {
+    /** The previous fill (no model bundled, or it couldn't run): patch-based, from the surroundings. */
+    private fun removeClassic(context: Context, src: Bitmap, t: Target): CleanPatch? {
         val w = src.width.toFloat(); val h = src.height.toFloat()
+        val minX0 = t.minX; val minY0 = t.minY; val maxX0 = t.maxX; val maxY0 = t.maxY
         val mask = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ALPHA_8)
         Canvas(mask).apply {
-            concat(inv)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-            if (lasso) drawPath(android.graphics.Path(path).apply { close() }, paint.apply { style = Paint.Style.FILL })
-            drawPath(path, paint.apply { style = Paint.Style.STROKE; strokeWidth = brush * ow })
+            if (t.objMask != null) drawBitmap(t.objMask, null, RectF(0f, 0f, w, h), Paint(Paint.FILTER_BITMAP_FLAG))
+            else {
+                concat(t.inv)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+                if (t.lasso) drawPath(android.graphics.Path(t.path).apply { close() }, paint.apply { style = Paint.Style.FILL })
+                drawPath(t.path, paint.apply { style = Paint.Style.STROKE; strokeWidth = t.brushPx })
+            }
         }
         val pad = max(32f, max(maxX0 - minX0, maxY0 - minY0) * .9f)
         val rl = (minX0 - pad).roundToInt().coerceIn(0, src.width - 1)
@@ -229,11 +274,14 @@ object CleanUp {
 
 /** The Clean Up brush, drawn as a soft glow over the photo while you paint. */
 @Composable
-fun CleanUpLayer(bmp: Bitmap, params: EditParams, enabled: Boolean, onStroke: (List<Float>) -> Unit, modifier: Modifier = Modifier) {
+fun CleanUpLayer(bmp: Bitmap, params: EditParams, enabled: Boolean, onStroke: (List<Float>) -> Unit, modifier: Modifier = Modifier, highlight: Bitmap? = null) {
     val cur by rememberUpdatedState(params)
     val cb by rememberUpdatedState(onStroke)
     val on by rememberUpdatedState(enabled)
     var live by remember { mutableStateOf<List<Offset>>(emptyList()) }
+    val glow = if (highlight != null) androidx.compose.animation.core.rememberInfiniteTransition(label = "glow").animateFloat(
+        0f, 1f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "g",
+    ).value else 0f
     fun rect(w: Float, h: Float): FloatArray {
         val (ow, oh) = EditRender.outputSize(cur, bmp.width.toFloat(), bmp.height.toFloat())
         val (s, o) = EditRender.fit(ow, oh, w, h)
@@ -262,6 +310,23 @@ fun CleanUpLayer(bmp: Bitmap, params: EditParams, enabled: Boolean, onStroke: (L
                 }
             }
     ) {
+        // The object being removed glows softly while the fill is worked out (like iPhone).
+        if (highlight != null) {
+            val r = rect(size.width, size.height)
+            val (ow, _) = EditRender.outputSize(cur, bmp.width.toFloat(), bmp.height.toFloat())
+            val s = r[2] / ow
+            val (bw, bh) = EditRender.baseSize(cur, bmp.width.toFloat(), bmp.height.toFloat())
+            val m = Matrix(EditRender.matrix(cur, bmp.width.toFloat(), bmp.height.toFloat())).apply { postTranslate(-cur.crop.left * bw, -cur.crop.top * bh) }
+            drawIntoCanvas { c ->
+                val nc = c.nativeCanvas
+                nc.save(); nc.translate(r[0], r[1]); nc.scale(s, s); nc.concat(m)
+                nc.drawBitmap(highlight, null, RectF(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG).apply {
+                    colorFilter = android.graphics.PorterDuffColorFilter(android.graphics.Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN)
+                    alpha = (90 + 70 * glow).toInt()
+                })
+                nc.restore()
+            }
+        }
         if (live.isEmpty()) return@Canvas
         val r = rect(size.width, size.height)
         val path = Path().apply {
