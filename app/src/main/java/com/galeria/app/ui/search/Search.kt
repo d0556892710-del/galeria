@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,10 +103,23 @@ fun SearchScreen(
     onClearRecent: () -> Unit,
     onOpen: (List<Media>, Media, Rect?) -> Unit,
     smart: Map<Long, com.galeria.app.data.SmartEntry> = emptyMap(),
+    /** Search by meaning (photos that look like the words), best first. */
+    semantic: (suspend (String, List<Media>) -> List<Media>)? = null,
 ) {
     val p = LocalPalette.current
     val fmt = rememberFmt()
-    val results = remember(library, query, fmt, smart) { searchLibrary(library, query, fmt, smart) }
+    // Worked out off the main thread (a big library has tens of thousands of photos): words, dates and
+    // things first, then photos that match by meaning, best first.
+    val found by androidx.compose.runtime.produceState<Pair<String, List<Media>>?>(null, library, query, fmt, smart) {
+        if (query.isBlank()) { value = query to emptyList(); return@produceState }
+        kotlinx.coroutines.delay(90)
+        val words = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { searchLibrary(library, query, fmt, smart) }
+        value = query to words
+        val meaning = semantic?.let { f -> runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { f(query, library) } }.getOrDefault(emptyList()) }.orEmpty()
+        if (meaning.isNotEmpty()) value = query to (meaning + words).distinctBy { it.id }
+    }
+    val results = found?.second.orEmpty()
+    val searched = found?.first == query
     val hebrew = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language.let { it == "iw" || it == "he" }
     // The most common things found in your photos become suggestions, like iPhone.
     val things = remember(smart, hebrew) {
@@ -116,7 +130,7 @@ fun SearchScreen(
     }
     if (query.isNotBlank()) {
         if (results.isEmpty()) {
-            EmptyState(stringResource(R.string.no_results), stringResource(R.string.no_results_sub))
+            if (searched) EmptyState(stringResource(R.string.no_results), stringResource(R.string.no_results_sub))
         } else {
             PhotoGrid(
                 items = results,

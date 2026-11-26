@@ -9,6 +9,8 @@ on:
       - '.github/workflows/export-lama.yml'
       - '.github/export_lama.py'
       - '.github/models.txt'
+      - '.github/workflows/add-models.yml'
+      - '.github/add_models.txt'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -53,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p app/src/main/assets/models
-          gh release download ai-models -p '*.onnx' -D app/src/main/assets/models --clobber || echo "models not available: Clean Up falls back to the classic fill"
+          gh release download ai-models -p '*.onnx' -p '*.json' -D app/src/main/assets/models --clobber || echo "models not available: Clean Up falls back to the classic fill"
           ls -la app/src/main/assets/models
 
       - name: Build release APK
@@ -262,7 +264,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p app/src/main/assets/models
-          gh release download ai-models -p '*.onnx' -D app/src/main/assets/models --clobber
+          gh release download ai-models -p '*.onnx' -p '*.json' -D app/src/main/assets/models --clobber
           ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
           mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
           ls -la apk

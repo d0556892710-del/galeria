@@ -12,8 +12,8 @@ android {
         applicationId = "com.galeria.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 14
-        versionName = "4.1"
+        versionCode = 15
+        versionName = "4.2"
         // Every phone in use today is 64-bit ARM; leaving out the other chips keeps the app small.
         // (-Pabi=x86_64 builds a copy for the virtual phone used by the automatic test.)
         ndk { abiFilters += ((project.findProperty("abi") as String?) ?: "arm64-v8a") }
@@ -91,6 +91,8 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     // On-device AI models (Clean Up with LaMa).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
+    // Hebrew searches are translated on the phone for the meaning-based search.
+    implementation("com.google.mlkit:translate:17.0.3")
     implementation(libs.androidx.exifinterface)
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

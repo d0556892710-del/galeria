@@ -70,3 +70,12 @@ for line in lc.splitlines():
 print("RESULT:", "DONE" if done else "TIMEOUT", f"{time.time()-t0:.0f}s", flush=True)
 m = sh(f"dumpsys meminfo {PKG}"); tot = re.search(r"TOTAL PSS:\s*(\d+)", m) or re.search(r"\n\s*TOTAL\s+(\d+)", m)
 print("memory", (int(tot.group(1)) // 1024 if tot else "?"), "MB", "alive" if sh(f"pidof {PKG}").strip() else "DEAD", flush=True)
+
+# ---- Search by meaning: the coffee photo should be found for "espresso cup" ----
+sh(f"am force-stop {PKG}"); time.sleep(1); adb("logcat", "-c")
+sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1"); time.sleep(25)  # let it understand the photo
+tap("Cancel")
+if tap("Search"):
+    time.sleep(1.5); sh("input text espresso%scup"); time.sleep(8); shot("07_search_espresso_cup")
+lc = adb("logcat", "-d", "-s", "PhotosPerf:I").decode("utf-8", "ignore")
+print("\n".join(l for l in lc.splitlines() if "semantic" in l) or "no semantic search line", flush=True)

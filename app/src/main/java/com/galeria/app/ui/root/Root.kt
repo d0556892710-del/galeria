@@ -436,6 +436,7 @@ private fun MainShell(vm: AppViewModel, settings: AppSettings) {
                         val viewed = remember(lib, settings.viewed) { val m = lib.associateBy { it.id }; settings.viewed.distinct().mapNotNull { m[it] } }
                         SearchScreen(
                             smart = smartIndex,
+                            semantic = { q, l -> com.galeria.app.data.Semantic.search(ctx, q, l, vm.repo.smart.clip) },
                             library = lib,
                             albums = albums,
                             query = vm.query,

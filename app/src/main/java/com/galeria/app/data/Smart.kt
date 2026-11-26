@@ -49,33 +49,97 @@ class SmartIndex(private val context: Context) {
     private val labeler by lazy { ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(.62f).build()) }
     private val reader by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
+    // ---- Meaning-based search (MobileCLIP): one point per photo ----
+    private val clipFile get() = File(context.filesDir, "clip_v1.bin")
+    /** Photo id → its point (unit length); read by search on any thread. */
+    val clip = java.util.concurrent.ConcurrentHashMap<Long, FloatArray>()
+    private val clipModified = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+    private var clipLoaded = false
+    private val clipOn by lazy { Clip.available(context) }
+    private val pendingClip = ArrayList<Triple<Long, Long, FloatArray>>()
+
+    private fun loadClip() = runCatching {
+        if (!clipFile.exists()) return@runCatching
+        java.io.DataInputStream(clipFile.inputStream().buffered(1 shl 16)).use { d ->
+            while (d.available() > 0) {
+                val id = d.readLong(); val mod = d.readLong()
+                val v = FloatArray(Clip.DIM) { d.readFloat() }
+                clip[id] = v; clipModified[id] = mod
+            }
+        }
+    }.onFailure { clipFile.delete(); clip.clear(); clipModified.clear() }
+
+    private fun flushClip() = runCatching {
+        if (pendingClip.isEmpty()) return@runCatching
+        java.io.DataOutputStream(java.io.FileOutputStream(clipFile, true).buffered(1 shl 16)).use { o ->
+            for ((id, mod, v) in pendingClip) { o.writeLong(id); o.writeLong(mod); for (x in v) o.writeFloat(x) }
+        }
+        pendingClip.clear()
+    }
+
+    /** Rewrites the file without deleted or replaced photos. */
+    private fun compactClip(existing: Set<Long>) = runCatching {
+        clip.keys.retainAll(existing); clipModified.keys.retainAll(existing)
+        val tmp = File(context.filesDir, "clip_v1.tmp")
+        java.io.DataOutputStream(tmp.outputStream().buffered(1 shl 16)).use { o ->
+            for ((id, v) in clip) { o.writeLong(id); o.writeLong(clipModified[id] ?: 0L); for (x in v) o.writeFloat(x) }
+        }
+        tmp.renameTo(clipFile)
+    }
+
+    /** Charging, and battery level (0…100). */
+    private fun power(): Pair<Boolean, Int> = runCatching {
+        val i = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val plugged = (i?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        val lvl = i?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, 100) ?: 100
+        val scale = i?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        plugged to (lvl * 100 / max(1, scale))
+    }.getOrDefault(true to 100)
+
     fun scan(lib: List<Media>) {
         job?.cancel()
         job = scope.launch {
             if (!loaded) { load(); loaded = true }
+            if (!clipLoaded) { loadClip(); clipLoaded = true }
             // People (face grouping) was removed: clear anything an earlier version stored.
             runCatching { File(context.filesDir, "faces").deleteRecursively() }
             delay(4000) // let the library settle and the first screens load first
             val map = HashMap(_index.value)
             var since = 0
+            var power = power(); var checked = 0
             for (m in lib.asReversed()) {
                 if (!isActive) break
                 if (m.isVideo || m.hiddenFile != null) continue
                 val e = map[m.id]
-                if (e != null && e.modified == m.dateModified) continue
+                val needSmart = e == null || e.modified != m.dateModified
+                // Meaning-based search: full speed while charging; slower (and not below 20 %) on battery.
+                if (++checked % 25 == 0) power = power()
+                val needClip = clipOn && clipModified[m.id] != m.dateModified && (power.first || power.second >= 20)
+                if (!needSmart && !needClip) continue
                 val bmp = runCatching { decode(m) }.getOrNull() ?: continue
-                val img = InputImage.fromBitmap(bmp, 0)
-                val labels = runCatching { Tasks.await(labeler.process(img)).map { it.text } }.getOrDefault(emptyList())
-                val texty = m.isScreenshot || labels.any { it in TEXTY }
-                val text = if (texty) runCatching { Tasks.await(reader.process(img)).text }.getOrDefault("") else ""
-                map[m.id] = SmartEntry(m.dateModified, labels, text.replace(Regex("\\s+"), " ").take(600))
+                if (needSmart) {
+                    val img = InputImage.fromBitmap(bmp, 0)
+                    val labels = runCatching { Tasks.await(labeler.process(img)).map { it.text } }.getOrDefault(emptyList())
+                    val texty = m.isScreenshot || labels.any { it in TEXTY }
+                    val text = if (texty) runCatching { Tasks.await(reader.process(img)).text }.getOrDefault("") else ""
+                    map[m.id] = SmartEntry(m.dateModified, labels, text.replace(Regex("\\s+"), " ").take(600))
+                }
+                if (needClip) runCatching { Clip.image(context, bmp) }.onSuccess { v ->
+                    clip[m.id] = v; clipModified[m.id] = m.dateModified
+                    pendingClip += Triple(m.id, m.dateModified, v)
+                    if (pendingClip.size >= 50) flushClip()
+                    if (!power.first) delay(150)
+                }.onFailure { android.util.Log.w("Photos", "clip", it) }
                 bmp.recycle()
                 if (++since >= 40) { since = 0; _index.value = HashMap(map); save(map) }
             }
+            flushClip()
             val existing = lib.mapTo(HashSet()) { it.id }
             map.keys.retainAll(existing)
             _index.value = map
             save(map)
+            if (clip.keys.any { it !in existing }) compactClip(existing)
+            Clip.releaseVision()
         }
     }
 
