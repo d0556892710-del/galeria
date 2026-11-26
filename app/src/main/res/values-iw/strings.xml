@@ -345,4 +345,6 @@
     <string name="customize_reorder">התאמה אישית וסידור מחדש</string>
     <string name="reorder">שינוי סדר</string>
     <string name="spatial_scene">סצנה מרחבית</string>
+    <string name="tab_portrait">פורטרט</string>
+    <string name="depth">עומק</string>
 </resources>

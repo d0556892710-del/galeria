@@ -53,6 +53,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -91,6 +93,7 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -99,7 +102,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-enum class EditTab { Live, Adjust, Filters, Crop }
+enum class EditTab { Portrait, Live, Adjust, Filters, Crop }
 private enum class CropTool { Straighten, Vertical, Horizontal }
 
 @Composable
@@ -193,8 +196,32 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         }
     }
     DisposableEffect(live) { val s = live; onDispose { s?.release() } }
+    // Portrait: any photo with a clear subject gets the Portrait tab; the depth is worked out from the
+    // original once the editor has opened (the viewer usually already knows whether there is a subject).
+    var portraitOk by remember { mutableStateOf(stored?.portrait == true) }
+    val portraitJob = remember { mutableStateOf<kotlinx.coroutines.Deferred<com.galeria.app.data.Portrait.Prepared?>?>(null) }
+    var portraitPrep by remember { mutableStateOf<com.galeria.app.data.Portrait.Prepared?>(null) }
+    LaunchedEffect(original) {
+        val o = original ?: return@LaunchedEffect
+        if (!com.galeria.app.data.spatialSupported || !com.galeria.app.data.Depth.available(ctx)) return@LaunchedEffect
+        val known = com.galeria.app.data.SpatialStore.known(m)
+        if (known != null && !known.eligible && stored?.portrait != true) return@LaunchedEffect
+        delay(350)
+        val job = scope.async(Dispatchers.Default) {
+            runCatching {
+                val photo = scaleTo(if (o.config == Bitmap.Config.HARDWARE) o.copy(Bitmap.Config.ARGB_8888, false) else o, 1280)
+                val d = com.galeria.app.data.Depth.estimate(ctx, photo)
+                val a = com.galeria.app.data.Spatial.analyse(d)
+                if (!a.eligible && stored?.portrait != true) null
+                else com.galeria.app.data.Portrait.prepare(photo, d, a)
+            }.onFailure { android.util.Log.w("Photos", "portrait depth", it) }.getOrNull()
+        }
+        portraitJob.value = job
+        val pr = job.await() ?: return@LaunchedEffect
+        portraitPrep = pr; portraitOk = true
+    }
     // The Clean Up models are big: free them when the editor closes.
-    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.LaMa.release(); com.galeria.app.data.Sam.release() }.start() } }
+    DisposableEffect(Unit) { onDispose { Thread { com.galeria.app.data.LaMa.release(); com.galeria.app.data.Sam.release(); com.galeria.app.data.Depth.release() }.start() } }
     // Clean Up works on the full-resolution picture so what's filled in is as sharp as the rest.
     var fullForClean by remember { mutableStateOf<Pair<Long, Bitmap>?>(null) }
     suspend fun cleanSource(pp: EditParams, fallback: Bitmap): Bitmap {
@@ -240,7 +267,21 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
             CleanUp.apply(if (b.isMutable) b.copy(Bitmap.Config.ARGB_8888, true) else b, params.cleanups)
         }
     }
-    val editBase: Bitmap? = if (params.cleanups.isNotEmpty()) cleanBase ?: editBase0 else editBase0
+    val editBase1: Bitmap? = if (params.cleanups.isNotEmpty()) cleanBase ?: editBase0 else editBase0
+    // Portrait blur on top (worked out by the GPU; one at a time while the dial moves).
+    var portraitBase by remember { mutableStateOf<Pair<Any, Bitmap>?>(null) }
+    val portraitSrc = androidx.compose.runtime.rememberUpdatedState(editBase1)
+    LaunchedEffect(Unit) {
+        snapshotFlow { listOf(portraitSrc.value, portraitPrep, params.portrait, params.aperture, params.focusX, params.focusY) }.conflate().collect { k ->
+            val b = k[0] as Bitmap?; val pr = portraitPrep; val pp = params
+            portraitBase = if (b == null || pr == null || !pp.portrait || android.os.Build.VERSION.SDK_INT < 33) null
+            else withContext(Dispatchers.Default) {
+                runCatching { k to com.galeria.app.data.Portrait.render(b, pr, pp.portraitFocus(pr), pp.aperture) }
+                    .onFailure { android.util.Log.w("Photos", "portrait", it) }.getOrNull()
+            }
+        }
+    }
+    val editBase: Bitmap? = if (params.portrait && portraitPrep != null) portraitBase?.second ?: editBase1 else editBase1
     val shown: Bitmap? = when {
         comparing -> original
         tab == EditTab.Live && !atKey && scrubFrame != null -> scrubFrame
@@ -261,7 +302,8 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         val session = live
         val src0 = if (pp.keyUs >= 0 && session != null) withContext(Dispatchers.IO) { session.frame(pp.keyUs, 6144) } else edits.decodeFull(m, mutable = pp.cleanups.isNotEmpty())
         src0 ?: return null
-        val src = withContext(Dispatchers.Default) { CleanUp.apply(src0, pp.cleanups) }
+        val pr = if (pp.portrait) portraitPrep ?: portraitJob.value?.await() else null
+        val src = withContext(Dispatchers.Default) { applyPortrait(ctx, CleanUp.apply(src0, pp.cleanups), pp, pr) }
         val out = withContext(Dispatchers.Default) { EditRender.render(src, pp) }
         val png = m.mime.equals("image/png", true)
         var bytes = edits.encode(m, out, png)
@@ -319,9 +361,16 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
         })))
     }
 
-    val tabs = if (isLive) listOf(EditTab.Live, EditTab.Adjust, EditTab.Filters, EditTab.Crop) else listOf(EditTab.Adjust, EditTab.Filters, EditTab.Crop)
+    val tabs = buildList {
+        if (portraitOk) add(EditTab.Portrait)
+        if (isLive) add(EditTab.Live)
+        add(EditTab.Adjust); add(EditTab.Filters); add(EditTab.Crop)
+    }
     val tabLabels = tabs.map {
-        stringResource(when (it) { EditTab.Live -> R.string.tab_live; EditTab.Adjust -> R.string.tab_adjust; EditTab.Filters -> R.string.tab_filters; EditTab.Crop -> R.string.tab_crop })
+        stringResource(when (it) {
+            EditTab.Portrait -> R.string.tab_portrait; EditTab.Live -> R.string.tab_live; EditTab.Adjust -> R.string.tab_adjust
+            EditTab.Filters -> R.string.tab_filters; EditTab.Crop -> R.string.tab_crop
+        })
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -344,12 +393,19 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                             Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 10.dp, vertical = 10.dp)
-                                .pointerInput(Unit) {
-                                    detectTapGestures(onPress = {
-                                        comparing = true
-                                        tryAwaitRelease()
-                                        comparing = false
-                                    })
+                                .pointerInput(tab == EditTab.Portrait && params.portrait) {
+                                    val focusing = tab == EditTab.Portrait && params.portrait
+                                    detectTapGestures(
+                                        onPress = {
+                                            // In Portrait a tap moves the focus, so only a held press shows the original.
+                                            val job = if (focusing) scope.launch { delay(180); comparing = true } else null
+                                            if (job == null) comparing = true
+                                            tryAwaitRelease()
+                                            job?.cancel()
+                                            comparing = false
+                                        },
+                                        onTap = { pos -> if (focusing) params = focusAt(params, b, pos, size.width.toFloat(), size.height.toFloat()) },
+                                    )
                                 },
                         )
                         if (cleaning && !comparing) CleanUpLayer(
@@ -413,6 +469,7 @@ private fun EditorContent(vm: AppViewModel, m: Media, onClose: () -> Unit) {
                     onRedo = { markRedo.removeLastOrNull()?.let { st -> params = params.copy(strokes = params.strokes + st) } },
                 ) else Crossfade(tab, animationSpec = tween(160), label = "panel") { t ->
                     when (t) {
+                        EditTab.Portrait -> PortraitPanel(params, onParams = { params = it })
                         EditTab.Adjust -> AdjustPanel(params, tool, onTool = { nt ->
                             if (nt == tool) {
                                 val v = params.eff(tool)
@@ -747,6 +804,62 @@ private fun LivePanel(
             onScrub = onScrub,
             onScrubEnd = onScrubEnd,
             onTrim = onTrim,
+        )
+    }
+}
+
+/** Portrait: the focus moves to what is at [pos] (a tap on the preview of [bmp], drawn in [w]×[h]). */
+private fun focusAt(p: EditParams, bmp: Bitmap, pos: Offset, w: Float, h: Float): EditParams {
+    val sw = bmp.width.toFloat(); val sh = bmp.height.toFloat()
+    val (ow, oh) = EditRender.outputSize(p, sw, sh)
+    val (s, o) = EditRender.fit(ow, oh, w, h)
+    val (bw, bh) = EditRender.baseSize(p, sw, sh)
+    val m = android.graphics.Matrix(EditRender.matrix(p, sw, sh)).apply { postTranslate(-p.crop.left * bw, -p.crop.top * bh) }
+    val inv = android.graphics.Matrix()
+    if (!m.invert(inv)) return p
+    val pt = floatArrayOf((pos.x - o.x) / s, (pos.y - o.y) / s)
+    inv.mapPoints(pt)
+    return p.copy(focusX = (pt[0] / sw).coerceIn(0f, 1f), focusY = (pt[1] / sh).coerceIn(0f, 1f))
+}
+
+/** Portrait: the PORTRAIT switch and the depth (ƒ-number) dial, like iPhone. */
+@Composable
+internal fun PortraitPanel(params: EditParams, onParams: (EditParams) -> Unit) {
+    val stops = com.galeria.app.data.Portrait.STOPS
+    val idx = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - params.aperture) } ?: 0
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        val on = params.portrait
+        Box(
+            Modifier
+                .height(26.dp)
+                .background(if (on) EditYellow else Color.White.copy(alpha = .16f), RoundedCornerShape(13.dp))
+                .pressable { onParams(params.copy(portrait = !on)) }
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                stringResource(R.string.tab_portrait).uppercase(), style = Type.caption1Semibold.copy(letterSpacing = 1.sp),
+                color = if (on) Color.Black else Color.White,
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        val f = stops[idx]
+        val label = if (f % 1f == 0f) f.toInt().toString() else f.toString()
+        ToolLabel(stringResource(R.string.depth) + "  ƒ" + label, Modifier.graphicsLayer { alpha = if (on) 1f else .45f })
+        Spacer(Modifier.height(4.dp))
+        // One tick per stop; ƒ1.4 on the left, ƒ16 on the right.
+        Ruler(
+            idx * .05f, 0f, (stops.size - 1) * .05f,
+            onValue = { v ->
+                val i = (v / .05f).roundToInt().coerceIn(0, stops.size - 1)
+                if (stops[i] != params.aperture || !on) {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                    onParams(params.copy(aperture = stops[i], portrait = true))
+                }
+            },
+            modifier = Modifier.padding(horizontal = 8.dp).graphicsLayer { alpha = if (on) 1f else .45f },
+            unitsPerTick = .05f,
         )
     }
 }

@@ -77,21 +77,6 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Publish APK as a release of its own version
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
-          # Each version gets its own release and is never replaced, so a download in progress is never cut off.
-          if gh release view "v$VER" >/dev/null 2>&1; then
-            echo "Release v$VER already exists; keeping it untouched."
-            exit 0
-          fi
-          cp app/build/outputs/apk/release/app-release.apk Photos.apk
-          cp Photos.apk "Photos-$VER.apk"
-          gh release create "v$VER" Photos.apk "Photos-$VER.apk" --title "Photos $VER" --notes "Version $VER, built from ${GITHUB_SHA::7}" --latest
-
       - name: Report APK size
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
@@ -106,6 +91,8 @@ jobs:
   smoke-test:
     # Installs the new APK on a virtual phone, installs it again over itself as an update, opens it and taps around.
     needs: build
+    outputs:
+      passed: ${{ steps.verdict.outputs.passed }}
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 55
@@ -170,6 +157,11 @@ jobs:
           cat smoke-result.txt 2>/dev/null || echo "no result file"
           cat smoke-result.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
           grep -q "RESULT: PASS" smoke-result.txt
+      - name: Verdict
+        id: verdict
+        if: always()
+        run: |
+          if grep -q "RESULT: PASS" smoke-result.txt; then echo "passed=true" >> $GITHUB_OUTPUT; else echo "passed=false" >> $GITHUB_OUTPUT; fi
 
   stress-test:
     # 20,000 photos on a virtual phone: start-up time, scrolling, screens and memory.
@@ -240,6 +232,8 @@ jobs:
   cleanup-test:
     # Clean Up end to end on a virtual phone: real photo, circle the spoon, LaMa removes it.
     needs: build
+    outputs:
+      passed: ${{ steps.verdict.outputs.passed }}
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 60
@@ -300,10 +294,17 @@ jobs:
           if ls cleanup_shots/*.png >/dev/null 2>&1; then
             gh release delete cleanup-shots --yes --cleanup-tag || true
             gh release create cleanup-shots cleanup_shots/*.png cleanup-result.txt --draft --title "Clean Up test" --notes "Built from ${GITHUB_SHA::7}"
+      - name: Verdict
+        id: verdict
+        if: always()
+        run: |
+          if grep -q "RESULT: DONE" cleanup-result.txt && grep -q "search answered" cleanup-result.txt; then echo "passed=true" >> $GITHUB_OUTPUT; else echo "passed=false" >> $GITHUB_OUTPUT; fi
 
   spatial-test:
     # Spatial Scenes on a virtual Android 13 phone (the 3D drawing needs its GPU shaders).
     needs: build
+    outputs:
+      passed: ${{ steps.verdict.outputs.passed }}
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 60
@@ -365,3 +366,33 @@ jobs:
             gh release delete spatial-shots --yes --cleanup-tag || true
             gh release create spatial-shots spatial_shots/*.png spatial-result.txt --draft --title "Spatial test" --notes "Built from ${GITHUB_SHA::7}"
           fi
+      - name: Verdict
+        id: verdict
+        if: always()
+        run: |
+          if grep -q "RESULT: PASS" spatial-result.txt; then echo "passed=true" >> $GITHUB_OUTPUT; else echo "passed=false" >> $GITHUB_OUTPUT; fi
+
+  publish:
+    # A version is published only after it passed the tests on virtual phones.
+    needs: [build, smoke-test, cleanup-test, spatial-test]
+    if: github.event_name == 'push' && needs.smoke-test.outputs.passed == 'true' && needs.cleanup-test.outputs.passed == 'true' && needs.spatial-test.outputs.passed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: galeria-apk
+          path: app/build/outputs/apk/release
+      - name: Publish APK as a release of its own version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          # Each version gets its own release and is never replaced, so a download in progress is never cut off.
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            echo "Release v$VER already exists; keeping it untouched."
+            exit 0
+          fi
+          cp app/build/outputs/apk/release/app-release.apk Photos.apk
+          cp Photos.apk "Photos-$VER.apk"
+          gh release create "v$VER" Photos.apk "Photos-$VER.apk" --title "Photos $VER" --notes "Version $VER, built from ${GITHUB_SHA::7}" --latest

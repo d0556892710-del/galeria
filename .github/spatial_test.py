@@ -62,6 +62,26 @@ for name, expect in [("astronaut", True), ("coffee", True), ("brick", False)]:
         time.sleep(1); shot(f"{name}_3_filled")
         tap("Spatial Scene"); time.sleep(1); shot(f"{name}_4_off")
     sh("input keyevent 4"); time.sleep(2)
+# ---- Portrait on any photo: the astronaut gets the Portrait tab; the blur appears when switched on ----
+print("== portrait", flush=True)
+adb("logcat", "-c"); open_photo(media_id("astronaut")); time.sleep(4)
+tap("Edit"); time.sleep(3)
+end = time.time() + 40
+while time.time() < end and find("Portrait") is None: time.sleep(2)
+has = find("Portrait") is not None
+print("   portrait tab:", has, flush=True)
+if not has: ok = False
+else:
+    tap("Portrait"); time.sleep(1.5); shot("portrait_1_tab")
+    tap("PORTRAIT"); time.sleep(6); shot("portrait_2_on")
+    # Most blur (drag the dial to ƒ1.4), then a tap on the background moves the focus there.
+    b = find("PORTRAIT")
+    if b:
+        y = b[3] + 120
+        sh(f"input swipe 300 {y} 1000 {y} 600"); time.sleep(5); shot("portrait_3_f14")
+    sh("input tap 900 700"); time.sleep(5); shot("portrait_4_focus_back")
+    sh("input keyevent 4"); time.sleep(1.5); shot("portrait_5_discard")
+    tap("Discard Changes"); time.sleep(1)
 for l in log().splitlines():
     if "PhotosPerf" in l or " Photos" in l or "FATAL" in l or "AndroidRuntime" in l: print(l[:300], flush=True)
 m = sh(f"dumpsys meminfo {PKG}"); tot = re.search(r"TOTAL PSS:\s*(\d+)", m) or re.search(r"\n\s*TOTAL\s+(\d+)", m)

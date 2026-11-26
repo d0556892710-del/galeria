@@ -83,6 +83,13 @@ data class EditParams(
     val strokes: List<Stroke> = emptyList(),
     /** Clean Up: filled patches laid over the original, in its own 0…1 coordinates. */
     val cleanups: List<CleanPatch> = emptyList(),
+    /** Portrait: a lens blur from depth, for any photo with a clear subject. */
+    val portrait: Boolean = false,
+    /** ƒ-number (1.4 blurs most, 16 least). */
+    val aperture: Float = 4.5f,
+    /** What is in focus, in the original's 0…1 coordinates (−1: the subject). */
+    val focusX: Float = -1f,
+    val focusY: Float = -1f,
 ) {
     val auto: Float get() = values[Tool.Auto.ordinal]
 
@@ -104,7 +111,7 @@ data class EditParams(
         get() = rot != 0 || flip || kotlin.math.abs(straighten) > .05f || kotlin.math.abs(vertical) > .004f || kotlin.math.abs(horizontal) > .004f ||
             crop.left > .001f || crop.top > .001f || crop.right < .999f || crop.bottom < .999f
     val liveChanged: Boolean get() = keyUs >= 0 || liveOff || trimStartUs > 0 || trimEndUs >= 0
-    val isIdentity: Boolean get() = !adjusted && filter == Filter.Original && !geometryChanged && !liveChanged && strokes.isEmpty() && cleanups.isEmpty()
+    val isIdentity: Boolean get() = !adjusted && filter == Filter.Original && !geometryChanged && !liveChanged && strokes.isEmpty() && cleanups.isEmpty() && !portrait
 
     fun resetGeometry() = copy(rot = 0, flip = false, straighten = 0f, vertical = 0f, horizontal = 0f, crop = Rect(0f, 0f, 1f, 1f), aspect = Aspect.Freeform)
 
@@ -119,6 +126,7 @@ data class EditParams(
         put("clean", JSONArray(cleanups.map { c ->
             JSONObject().put("f", c.file).put("l", c.left.toDouble()).put("t", c.top.toDouble()).put("r", c.right.toDouble()).put("b", c.bottom.toDouble())
         }))
+        put("po", portrait); put("ap", aperture.toDouble()); put("fx", focusX.toDouble()); put("fy", focusY.toDouble())
         put("strokes", JSONArray(strokes.map { st ->
             JSONObject().put("t", st.tool).put("c", st.color).put("w", st.width.toDouble()).put("p", JSONArray(st.points.map { it.toDouble() }))
         }))
@@ -141,6 +149,8 @@ data class EditParams(
                 portraitAspect = o.optBoolean("pa"),
                 keyUs = o.optLong("key", -1L), liveOff = o.optBoolean("loff"), muted = o.optBoolean("mute"),
                 trimStartUs = o.optLong("ts", 0L), trimEndUs = o.optLong("te", -1L),
+                portrait = o.optBoolean("po"), aperture = o.optDouble("ap", 4.5).toFloat(),
+                focusX = o.optDouble("fx", -1.0).toFloat(), focusY = o.optDouble("fy", -1.0).toFloat(),
                 cleanups = o.optJSONArray("clean")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i ->
                         runCatching {

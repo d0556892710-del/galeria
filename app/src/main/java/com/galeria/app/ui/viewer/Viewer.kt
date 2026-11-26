@@ -114,6 +114,8 @@ import com.galeria.app.ui.components.duration
 import com.galeria.app.ui.components.fileSize
 import com.galeria.app.ui.components.onRootRect
 import com.galeria.app.ui.components.pressable
+import com.galeria.app.data.SpatialStore
+import com.galeria.app.data.spatialSupported
 import com.galeria.app.ui.components.rememberFmt
 import com.galeria.app.ui.library.thumbModel
 import com.galeria.app.ui.root.Actions

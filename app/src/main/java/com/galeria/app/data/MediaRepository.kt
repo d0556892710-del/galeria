@@ -31,7 +31,7 @@ import java.io.File
  */
 private const val SNAP_MAGIC = 0x50484F31 // "PHO1"
 
-class MediaRepository(private val context: Context) {
+class MediaRepository(val context: Context) {
     private val resolver: ContentResolver = context.contentResolver
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.w("Photos", "background task failed", e) })
 

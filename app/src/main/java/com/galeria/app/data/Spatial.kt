@@ -115,11 +115,21 @@ object Spatial {
 
     // ---------------------------------------------------------------- layers
 
-    /**
-     * Builds the two layers from [photo] (software bitmap, long side about 1000–1600 px). The background
-     * behind the subject is filled quickly here; [sharpen] later fills it properly with LaMa.
-     */
-    fun build(id: Long, photo: Bitmap, d: Depth.Map, a: Analysis): Scene {
+    /** The subject cut out of a photo: soft and firm edges, and the depth of each side carried across the edge. */
+    class Separation(
+        val w: Int, val h: Int, val px: IntArray,
+        /** Edge from the guided filter (0…1); [alpha] is the firmer version used for the subject. */
+        val soft: FloatArray, val alpha: FloatArray,
+        /** The subject's depth continued outward, and the background's depth continued in behind the subject. */
+        val fgDep: FloatArray, val bgDep: FloatArray,
+        val hole: BooleanArray,
+    ) {
+        /** Depth with the subject's outline as sharp as the photo's (for Portrait). */
+        fun depth(): FloatArray = FloatArray(w * h) { alpha[it] * fgDep[it] + (1 - alpha[it]) * bgDep[it] }
+    }
+
+    /** Cuts the subject out of [photo] (software bitmap, long side about 1000–1600 px). */
+    fun separate(photo: Bitmap, d: Depth.Map, a: Analysis): Separation {
         val w = photo.width; val h = photo.height; val n = w * h
         val px = IntArray(n).also { photo.getPixels(it, 0, w, 0, 0, w, h) }
         // Depth at the photo's size.
@@ -135,12 +145,28 @@ object Spatial {
         val grey = FloatArray(n) { val c = px[it]; (((c shr 16) and 0xFF) * .299f + ((c shr 8) and 0xFF) * .587f + (c and 0xFF) * .114f) / 255f }
         val r = max(2, max(w, h) / 160)
         val soft = guided(grey, rough, w, h, r, 1e-3f)
-        // A firmer edge for the subject layer (no rim of background carried along with it).
+        // A firmer edge for the subject (no rim of background carried along with it).
         val alpha = FloatArray(n) { ((soft[it] - .25f) / .6f).coerceIn(0f, 1f) }
+        // The subject's depth, carried outward past its edge (so its outline moves as one piece).
+        val fgDep = fillPushPull(dep, BooleanArray(n) { alpha[it] < .5f }, w, h)
+        // What is behind it: the subject, a little wider (so no outline of it is left behind).
+        val grow = max(3, (max(w, h) * .012f).roundToInt())
+        val hole = dilate(BooleanArray(n) { soft[it] > .08f }, w, h, grow)
+        val bgDep = fillPushPull(dep, hole, w, h)
+        return Separation(w, h, px, soft, alpha, fgDep, bgDep, hole)
+    }
+
+    /**
+     * Builds the two layers from [photo]. The background behind the subject is filled quickly here;
+     * [sharpen] later fills it properly with LaMa.
+     */
+    fun build(id: Long, photo: Bitmap, d: Depth.Map, a: Analysis): Scene {
+        val sep = separate(photo, d, a)
+        val w = sep.w; val h = sep.h; val n = w * h; val px = sep.px; val alpha = sep.alpha
         // Edge colours without the background mixed in: F = (C − (1−α)·B) / α, with B the background
         // just outside; where α is small, the subject's own colour spread outward.
         val chans = Array(3) { c -> FloatArray(n) { ((px[it] shr (16 - 8 * c)) and 0xFF) / 255f } }
-        val outside = BooleanArray(n) { soft[it] > .02f }
+        val outside = BooleanArray(n) { sep.soft[it] > .02f }
         val inside = BooleanArray(n) { alpha[it] < .97f }
         val fgCh = Array(3) { c ->
             val bk = fillPushPull(chans[c], outside, w, h)
@@ -160,16 +186,9 @@ object Spatial {
             if (ai == 0) 0 else (ai shl 24) or (to8(fgCh[0][i]) shl 16) or (to8(fgCh[1][i]) shl 8) or to8(fgCh[2][i])
         }
         val fg = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { it.setPixels(fgPx, 0, w, 0, 0, w, h) }
-        // The subject layer's depth, carried outward past its edge (so its outline moves as one piece).
-        val fgDep = fillPushPull(dep, BooleanArray(n) { alpha[it] < .5f }, w, h)
-        // What to fill behind it: the subject, a little wider (so no outline of it is left behind).
-        val grow = max(3, (max(w, h) * .012f).roundToInt())
-        val hole = dilate(BooleanArray(n) { soft[it] > .08f }, w, h, grow)
-        val bgCh = Array(3) { c -> fillPushPull(chans[c], hole, w, h) }
+        val bgCh = Array(3) { c -> fillPushPull(chans[c], sep.hole, w, h) }
         val bg = Bitmap.createBitmap(IntArray(n) { i -> (0xFF shl 24) or (to8(bgCh[0][i]) shl 16) or (to8(bgCh[1][i]) shl 8) or to8(bgCh[2][i]) }, w, h, Bitmap.Config.ARGB_8888)
-        // The background's depth behind the subject: spread in from around it.
-        val bgDep = fillPushPull(dep, hole, w, h)
-        return Scene(id, fg, bg, greyBitmap(fgDep, w, h), greyBitmap(bgDep, w, h), a.focus, hole)
+        return Scene(id, fg, bg, greyBitmap(sep.fgDep, w, h), greyBitmap(sep.bgDep, w, h), a.focus, sep.hole)
     }
 
     private fun to8(v: Float) = (v * 255f).roundToInt().coerceIn(0, 255)
@@ -218,7 +237,7 @@ object Spatial {
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or bl
     }
 
-    private fun greyBitmap(v: FloatArray, w: Int, h: Int): Bitmap {
+    fun greyBitmap(v: FloatArray, w: Int, h: Int): Bitmap {
         val px = IntArray(w * h) { val g = (v[it] * 255f).roundToInt().coerceIn(0, 255); (0xFF shl 24) or (g shl 16) or (g shl 8) or g }
         return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
     }
