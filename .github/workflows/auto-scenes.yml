@@ -1,0 +1,28 @@
+name: Auto scene points
+# Works out the text points Auto compares photos with, and adds them to the bundled models.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/auto-scenes.yml'
+      - '.github/auto_scenes.py'
+permissions:
+  contents: write
+jobs:
+  scenes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Work them out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install --quiet onnxruntime numpy tokenizers
+          mkdir -p in
+          gh release download ai-models -p clip_text.onnx -p clip_tokenizer.json -D in
+          python3 .github/auto_scenes.py in/clip_text.onnx in/clip_tokenizer.json auto_scenes.json
+          ls -la auto_scenes.json
+          gh release upload ai-models auto_scenes.json --clobber
