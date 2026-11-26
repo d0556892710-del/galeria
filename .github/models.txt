@@ -1,6 +1,5 @@
-# name url
-mc2_s2_vision.onnx https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/vision_model.onnx
-mc2_s2_text.onnx https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/text_model.onnx
-mc2_s2_preprocessor.json https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/preprocessor_config.json
-mc2_s2_config.json https://huggingface.co/plhery/mobileclip2-onnx/resolve/main/onnx/s2/config.json
-clip_tokenizer.json https://huggingface.co/Xenova/mobileclip_s2/resolve/main/tokenizer.json
+# name url  (Depth Anything V2 Small, Apache-2.0; BiRefNet lite, MIT)
+depth_small.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+depth_preprocessor.json https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/preprocessor_config.json
+birefnet_lite.onnx https://huggingface.co/onnx-community/BiRefNet_lite/resolve/main/onnx/model.onnx
+birefnet_preprocessor.json https://huggingface.co/onnx-community/BiRefNet_lite/resolve/main/preprocessor_config.json

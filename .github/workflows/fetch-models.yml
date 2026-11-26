@@ -35,13 +35,22 @@ jobs:
           cat models/SHA256SUMS.txt
       - name: Inspect ONNX models
         run: |
-          python3 -m pip install --quiet onnxruntime
+          python3 -m pip install --quiet onnxruntime numpy
+          for f in models/*.json; do echo "== $f"; head -c 1500 "$f"; echo; done
           python3 - <<'PY'
-          import glob, onnxruntime as ort
+          import glob, time, numpy as np, onnxruntime as ort
           for f in sorted(glob.glob("models/*.onnx")):
               try:
                   s = ort.InferenceSession(f, providers=["CPUExecutionProvider"])
-                  print(f, "IN", [(i.name, i.shape, i.type) for i in s.get_inputs()], "OUT", [(o.name, o.shape, o.type) for o in s.get_outputs()])
+                  ins = s.get_inputs()
+                  print(f, "IN", [(i.name, i.shape, i.type) for i in ins], "OUT", [(o.name, o.shape, o.type) for o in s.get_outputs()], flush=True)
+                  # Rough speed on this CPU (4 cores), with free sizes set to 518 (or the fixed size).
+                  if len(ins) == 1 and "float" in ins[0].type:
+                      for side in ([518, 770] if not isinstance(ins[0].shape[2], int) else [ins[0].shape[2]]):
+                          shp = [1, 3, side, side]
+                          x = np.random.rand(*shp).astype(np.float32)
+                          s.run(None, {ins[0].name: x}); t = time.time(); out = s.run(None, {ins[0].name: x})
+                          print("   run", shp, f"{(time.time()-t)*1000:.0f} ms", [o.shape for o in out], "range", float(out[0].min()), float(out[0].max()), flush=True)
               except Exception as e:
                   print(f, "ERROR", e)
           PY
