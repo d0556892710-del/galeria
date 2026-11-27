@@ -1,0 +1,41 @@
+name: Models pack
+# A fixed set of the on-device AI models that the app downloads on first use (the app itself stays
+# small enough for phones to install). A new set gets a new tag, so a published file never changes.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/models-pack.yml'
+permissions:
+  contents: write
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: models-1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect, list and publish
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG already exists (files never change)"; exit 0; fi
+          mkdir -p pack
+          gh release download ai-models -D pack \
+            -p lama_512.onnx -p lama_1024.onnx -p sam_encoder.onnx -p sam_decoder.onnx \
+            -p clip_vision.onnx -p clip_text.onnx -p depth_small.onnx -p heb.traineddata -p eng.traineddata
+          ls -la pack
+          # Smallest and most used first: the app downloads them in this order.
+          python3 - <<'PY'
+          import hashlib, json, os
+          order = ["sam_decoder.onnx", "depth_small.onnx", "clip_vision.onnx", "clip_text.onnx", "lama_512.onnx",
+                   "sam_encoder.onnx", "heb.traineddata", "eng.traineddata", "lama_1024.onnx"]
+          out = []
+          for n in order:
+              h = hashlib.sha256()
+              with open(f"pack/{n}", "rb") as f:
+                  for b in iter(lambda: f.read(1 << 20), b""): h.update(b)
+              out.append({"name": n, "size": os.path.getsize(f"pack/{n}"), "sha256": h.hexdigest()})
+          json.dump(out, open("pack/models.json", "w"), indent=1)
+          print(json.dumps(out, indent=1))
+          PY
+          gh release create "$TAG" pack/* --prerelease --title "AI models (set 1)" --notes "Downloaded by the app on first use. Never changed: a new set gets a new tag."
