@@ -341,4 +341,9 @@
     <string name="tab_portrait">Portrait</string>
     <string name="depth">Depth</string>
     <string name="share_ellipsis">Share…</string>
+    <string name="models_channel">AI models</string>
+    <string name="models_downloading">Downloading the AI models</string>
+    <string name="models_starting">Starting…</string>
+    <string name="models_paused">AI model download paused</string>
+    <string name="models_paused_sub">Open Photos to continue it.</string>
 </resources>

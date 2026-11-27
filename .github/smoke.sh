@@ -16,6 +16,8 @@ adb shell am broadcast -a android.intent.action.MEDIA_MOUNTED -d file:///sdcard 
 
 R1=$(adb install "$APK" 2>&1 | tail -1); log "First install: $R1"
 R2=$(adb install -r "$APK" 2>&1 | tail -1); log "Install again over it, as an update: $R2"
+# The app downloads its AI models in the background: its log is kept from here on.
+adb logcat -v time PhotosPerf:I Photos:W '*:S' > models.log 2>&1 &
 log "Installed: $(adb shell dumpsys package $PKG | grep -m1 versionName | tr -d ' ') $(adb shell dumpsys package $PKG | grep -m1 -o 'versionCode=[0-9]*')"
 
 for p in READ_EXTERNAL_STORAGE ACCESS_MEDIA_LOCATION READ_MEDIA_IMAGES READ_MEDIA_VIDEO; do
@@ -50,7 +52,23 @@ if [ -n "$CRASH" ]; then
 fi
 adb shell run-as $PKG cat files/last_crash.txt 2>/dev/null | head -60 | tee -a "$OUT" || true
 
-if echo "$R1" | grep -q Success && echo "$R2" | grep -q Success && [ -z "$CRASH" ]; then
+log ""
+log "## AI models: downloaded in the app (the app itself is small enough to install)"
+for i in $(seq 1 72); do grep -q "models ready" models.log && break; sleep 10; done
+MODELS=$(grep -E "models ready|model download" models.log | tail -4)
+log "$MODELS"
+grep -q "models ready" models.log && MOK=1 || MOK=0
+
+log ""
+log "## The real phone APK (arm64) installs as an update"
+R3="skipped"
+if [ -f apk/real.apk ]; then
+  ls -la apk/real.apk | tee -a "$OUT"
+  R3=$(timeout 300 adb install -r apk/real.apk 2>&1 | tail -1)
+fi
+log "Real APK: $R3"
+
+if echo "$R1" | grep -q Success && echo "$R2" | grep -q Success && [ -z "$CRASH" ] && [ "$MOK" = 1 ] && echo "$R3" | grep -q Success; then
   log ""; log "RESULT: PASS"
 else
   log ""; log "RESULT: FAIL"

@@ -99,7 +99,19 @@ class MainActivity : AppCompatActivity(), Bridge {
         checkPermission()
         if (vm.permissionGranted) {
             if (!before) vm.start() else vm.refresh()
+            startModelDownload()
         }
+    }
+
+    /** The AI models download once in the background, with a progress notification (asked for once). */
+    private fun startModelDownload() {
+        if (com.galeria.app.data.Models.missing(this).isEmpty()) return
+        val prefs = getSharedPreferences("models", MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !prefs.getBoolean("asked_notify", false)) {
+            prefs.edit().putBoolean("asked_notify", true).apply()
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 41)
+        }
+        ModelDownloadService.startIfNeeded(this)
     }
 
     override fun onStop() {

@@ -348,4 +348,9 @@
     <string name="tab_portrait">פורטרט</string>
     <string name="depth">עומק</string>
     <string name="share_ellipsis">שיתוף…</string>
+    <string name="models_channel">מודלי AI</string>
+    <string name="models_downloading">מוריד את מודלי ה-AI</string>
+    <string name="models_starting">מתחיל…</string>
+    <string name="models_paused">הורדת מודלי ה-AI הושהתה</string>
+    <string name="models_paused_sub">פתח את התמונות כדי להמשיך.</string>
 </resources>

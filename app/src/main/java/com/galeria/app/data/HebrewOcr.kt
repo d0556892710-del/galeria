@@ -14,21 +14,14 @@ object HebrewOcr {
     private var api: TessBaseAPI? = null
     private val FILES = listOf("heb.traineddata", "eng.traineddata")
 
-    fun available(context: Context): Boolean = FILES.all { f -> runCatching { context.assets.open("models/$f").use { true } }.getOrDefault(false) }
+    fun available(context: Context): Boolean = FILES.all { Models.ready(context, it) }
 
     @Synchronized
     private fun api(context: Context): TessBaseAPI {
         api?.let { return it }
-        val root = File(context.filesDir, "ocr")
-        val data = File(root, "tessdata").apply { mkdirs() }
-        for (name in FILES) {
-            val f = File(data, name)
-            if (!f.exists() || f.length() == 0L) {
-                val tmp = File(data, "$name.tmp")
-                context.assets.open("models/$name").use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
-                tmp.renameTo(f)
-            }
-        }
+        // Tesseract reads <root>/tessdata/<lang>.traineddata.
+        val files = FILES.map { Models.file(context, it) ?: error("$it not downloaded yet") }
+        val root = files.first().parentFile!!.parentFile!!
         val a = TessBaseAPI()
         check(a.init(root.absolutePath, "heb+eng", TessBaseAPI.OEM_LSTM_ONLY)) { "tesseract init" }
         a.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK)

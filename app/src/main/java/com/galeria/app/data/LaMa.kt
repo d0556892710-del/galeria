@@ -18,24 +18,10 @@ object LaMa {
     private val sessions = HashMap<Int, OrtSession>()
 
     /** Model sizes that are bundled with this build. */
-    fun available(context: Context): List<Int> = listOf(512, 1024).filter { s ->
-        runCatching { context.assets.openFd("models/lama_$s.onnx").use { true } }.getOrElse {
-            runCatching { context.assets.open("models/lama_$s.onnx").use { true } }.getOrDefault(false)
-        }
-    }
+    fun available(context: Context): List<Int> = listOf(512, 1024).filter { s -> Models.ready(context, "lama_$s.onnx") }
 
-    /** The model file on disk (copied out of the app once; ONNX Runtime reads it from there). */
-    private fun file(context: Context, size: Int): File {
-        val dir = File(context.filesDir, "models").apply { mkdirs() }
-        val f = File(dir, "lama_$size.onnx")
-        val expected = runCatching { context.assets.openFd("models/lama_$size.onnx").use { it.length } }.getOrDefault(-1L)
-        if (!f.exists() || (expected > 0 && f.length() != expected)) {
-            val tmp = File(dir, "lama_$size.tmp")
-            context.assets.open("models/lama_$size.onnx").use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
-            tmp.renameTo(f)
-        }
-        return f
-    }
+    /** The model file on disk (downloaded once, or copied out of the app). */
+    private fun file(context: Context, size: Int): File = Models.file(context, "lama_$size.onnx") ?: error("lama_$size not downloaded yet")
 
     // Sessions in use are never closed under a running fill: a release waits for the last user.
     private var users = 0

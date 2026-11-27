@@ -32,6 +32,10 @@ import java.io.File
 private const val SNAP_MAGIC = 0x50484F31 // "PHO1"
 
 class MediaRepository(val context: Context) {
+    // Once the AI models have downloaded, the library is looked at again (search by meaning etc.).
+    @Volatile private var lastLib: List<Media> = emptyList()
+    init { Models.onReady { lastLib.takeIf { it.isNotEmpty() }?.let { smart.scan(it) } } }
+
     private val resolver: ContentResolver = context.contentResolver
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.w("Photos", "background task failed", e) })
 
@@ -131,7 +135,7 @@ class MediaRepository(val context: Context) {
                 _loaded.value = true
             }
             motion.scan(lib)
-            if (result.isSuccess && lib.isNotEmpty()) smart.scan(lib)
+            if (result.isSuccess && lib.isNotEmpty()) { lastLib = lib; smart.scan(lib) }
             if (result.isSuccess) {
                 saveSnapshot(lib)
                 // Photos deleted elsewhere leave your albums (never on an empty/failed read).

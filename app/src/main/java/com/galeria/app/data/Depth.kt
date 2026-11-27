@@ -45,19 +45,9 @@ object Depth {
         }
     }
 
-    fun available(context: Context): Boolean = runCatching { context.assets.openFd("models/$NAME").use { true } }.getOrDefault(false)
+    fun available(context: Context): Boolean = Models.ready(context, NAME)
 
-    private fun file(context: Context): File {
-        val dir = File(context.filesDir, "models").apply { mkdirs() }
-        val f = File(dir, NAME)
-        val expected = runCatching { context.assets.openFd("models/$NAME").use { it.length } }.getOrDefault(-1L)
-        if (!f.exists() || (expected > 0 && f.length() != expected)) {
-            val tmp = File(dir, "$NAME.tmp")
-            context.assets.open("models/$NAME").use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
-            tmp.renameTo(f)
-        }
-        return f
-    }
+    private fun file(context: Context): File = Models.file(context, NAME) ?: error("$NAME not downloaded yet")
 
     @Synchronized
     private fun session(context: Context): OrtSession = session ?: env.createSession(

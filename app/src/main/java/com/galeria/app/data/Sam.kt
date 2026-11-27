@@ -26,20 +26,9 @@ object Sam {
     /** What the model understood about one picture (computed once, then each selection is instant). */
     class Embedding(val embed: FloatBuffer, val hr0: FloatBuffer, val hr1: FloatBuffer, val width: Int, val height: Int)
 
-    fun available(context: Context): Boolean =
-        runCatching { context.assets.openFd("models/sam_encoder.onnx").use { true } && context.assets.openFd("models/sam_decoder.onnx").use { true } }.getOrDefault(false)
+    fun available(context: Context): Boolean = Models.ready(context, "sam_encoder.onnx") && Models.ready(context, "sam_decoder.onnx")
 
-    private fun file(context: Context, name: String): File {
-        val dir = File(context.filesDir, "models").apply { mkdirs() }
-        val f = File(dir, name)
-        val expected = runCatching { context.assets.openFd("models/$name").use { it.length } }.getOrDefault(-1L)
-        if (!f.exists() || (expected > 0 && f.length() != expected)) {
-            val tmp = File(dir, "$name.tmp")
-            context.assets.open("models/$name").use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
-            tmp.renameTo(f)
-        }
-        return f
-    }
+    private fun file(context: Context, name: String): File = Models.file(context, name) ?: error("$name not downloaded yet")
 
     private fun options() = OrtSession.SessionOptions().apply {
         setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)

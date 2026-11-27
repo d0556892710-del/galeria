@@ -25,22 +25,10 @@ object Clip {
     private var tokenizer: ClipTokenizer? = null
     const val DIM = 512
 
-    fun available(context: Context): Boolean = runCatching {
-        context.assets.openFd("models/clip_vision.onnx").use { true } && context.assets.openFd("models/clip_text.onnx").use { true } &&
-            context.assets.open("models/clip_tokenizer.json").use { true }
-    }.getOrDefault(false)
+    fun available(context: Context): Boolean = Models.ready(context, "clip_vision.onnx") && Models.ready(context, "clip_text.onnx") &&
+        runCatching { context.assets.open("models/clip_tokenizer.json").use { true } }.getOrDefault(false)
 
-    private fun file(context: Context, name: String): File {
-        val dir = File(context.filesDir, "models").apply { mkdirs() }
-        val f = File(dir, name)
-        val expected = runCatching { context.assets.openFd("models/$name").use { it.length } }.getOrDefault(-1L)
-        if (!f.exists() || (expected > 0 && f.length() != expected)) {
-            val tmp = File(dir, "$name.tmp")
-            context.assets.open("models/$name").use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
-            tmp.renameTo(f)
-        }
-        return f
-    }
+    private fun file(context: Context, name: String): File = Models.file(context, name) ?: error("$name not downloaded yet")
 
     @Synchronized
     private fun vision(context: Context): OrtSession = vision ?: env.createSession(

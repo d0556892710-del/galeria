@@ -12,8 +12,8 @@ android {
         applicationId = "com.galeria.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 18
-        versionName = "4.5"
+        versionCode = 19
+        versionName = "4.6"
         // Every phone in use today is 64-bit ARM; leaving out the other chips keeps the app small.
         // (-Pabi=x86_64 builds a copy for the virtual phone used by the automatic test.)
         ndk { abiFilters += ((project.findProperty("abi") as String?) ?: "arm64-v8a") }

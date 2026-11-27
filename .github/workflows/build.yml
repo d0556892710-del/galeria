@@ -14,6 +14,7 @@ on:
       - '.github/workflows/patch-models.yml'
       - '.github/patch_clip.py'
       - '.github/workflows/auto-scenes.yml'
+      - '.github/workflows/models-pack.yml'
       - '.github/auto_scenes.py'
   pull_request:
     branches: [ main ]
@@ -54,12 +55,15 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      - name: Bundle the on-device AI models
+      - name: The AI models' list (the models themselves download in the app)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Phones (HyperOS especially) refuse to install an app of over a gigabyte: the app carries only
+          # the small files and the list (sizes, SHA-256) of the models it downloads once.
           mkdir -p app/src/main/assets/models
-          gh release download ai-models -p '*.onnx' -p '*.json' -p '*.traineddata' -D app/src/main/assets/models --clobber && rm -f app/src/main/assets/models/birefnet_lite.onnx || echo "models not available: Clean Up falls back to the classic fill"
+          gh release download ai-models -p clip_tokenizer.json -p auto_scenes.json -D app/src/main/assets/models --clobber
+          gh release download models-1 -p models.json -D app/src/main/assets/models --clobber
           ls -la app/src/main/assets/models
 
       - name: Build release APK
@@ -97,7 +101,7 @@ jobs:
       passed: ${{ steps.verdict.outputs.passed }}
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 55
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -117,9 +121,20 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
       - name: Build the same app for the virtual phone's chip (x86_64)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Like the phone build: only the models' list inside; the app downloads them itself.
+          mkdir -p app/src/main/assets/models
+          gh release download models-1 -p models.json -D app/src/main/assets/models --clobber
           ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
           mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
+      - name: The real phone APK
+        uses: actions/download-artifact@v4
+        with:
+          name: galeria-apk
+          path: real
+      - run: cp real/app-release.apk apk/real.apk && ls -la apk
       - name: Make test photos
         run: |
           command -v convert >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
@@ -263,6 +278,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets/models
           gh release download ai-models -p '*.onnx' -p '*.json' -p '*.traineddata' -D app/src/main/assets/models --clobber && rm -f app/src/main/assets/models/birefnet_lite.onnx
+          gh release download models-1 -p models.json -D app/src/main/assets/models --clobber
           ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
           mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
           ls -la apk
@@ -335,6 +351,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets/models
           gh release download ai-models -p '*.onnx' -p '*.json' -p '*.traineddata' -D app/src/main/assets/models --clobber && rm -f app/src/main/assets/models/birefnet_lite.onnx
+          gh release download models-1 -p models.json -D app/src/main/assets/models --clobber
           ./gradlew assembleRelease -Pabi=x86_64 --no-daemon -q
           mkdir -p apk && cp app/build/outputs/apk/release/app-release.apk apk/app-release.apk
           ls -la apk
